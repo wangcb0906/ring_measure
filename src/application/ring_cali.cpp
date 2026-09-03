@@ -1,5 +1,6 @@
 #include <vector>
 #include <cassert>
+#include <optional>
 #include <iomanip> // to set the precision in inicpp
 #include <inicpp.h>
 
@@ -8,6 +9,8 @@
 // To make SPDLOG_LOGGER_TRACE work with fs::path
 #include <spdlog/fmt/std.h>
 #include "visualization.hpp"
+
+#include <argparse/argparse.hpp>
 
 #if defined(RING_MEASURE_CALI_ONLY) && defined(RING_MEASURE_VERIFY_ONLY)
     #error "Cannot define both RING_MEASURE_CALI_ONLY and RING_MEASURE_VERIFY_ONLY!"
@@ -19,67 +22,78 @@ main (int argc, char* argv[])
     namespace fs = std::filesystem;
     namespace rm = RingMeasure;
 
-    rm::RingCalibration cali;
-
     // logger configuration
     auto logger=spdlog::default_logger();
     logger->set_pattern("[%Y-%m-%d %H:%M:%S] [%l] [%s:%#] %v");
 
-    if(argc != 2) 
-    {
-        SPDLOG_LOGGER_ERROR(logger, "Invalid number of arguments. Usage: {} <measure_config_file/folder>", argv[0]);
-        exit(EXIT_FAILURE);
+    argparse::ArgumentParser program("ring_cali", "0.1");
+    program.add_argument("cali")
+           .help("Folder to calibrate or a single measure configuration file.");
+
+    program.add_argument("-p", "--parameter")
+           .help("Path to the parameter file")
+           .default_value(std::string("parameter.ini"));
+
+    program.add_argument("-r", "--ring-cfg")
+           .help("Specific ring to calibrate, if not specified,\n\
+all rings in the folder will be processed.");
+
+    try {
+        program.parse_args(argc, argv);
+    } catch (const std::exception& err) {
+        SPDLOG_LOGGER_ERROR(logger, "Error parsing arguments: {}", err.what());
+        auto aux = std::ostringstream{};
+        aux << program;
+        SPDLOG_LOGGER_ERROR(logger, "{}", aux.str());
+        return 1;
     }
 
-    fs::path path_arg = argv[1];
-    if (!fs::exists(path_arg)) {
-        SPDLOG_LOGGER_ERROR(logger, "File {} does not exist.", path_arg);
-        exit(EXIT_FAILURE);
+    fs::path param_file = program.get<std::string>("--parameter");
+    fs::path root = program.get<std::string>("cali");
+
+    if (!fs::exists(root)) {
+        SPDLOG_LOGGER_ERROR(logger, "Calibration folder {} does not exist.", root);
+        return 1;
     }
 
-    bool is_file = fs::is_regular_file(path_arg);
-    // Read the configuration of the robot
-    fs::path single_cfg_file;
-    fs::path config_path;
+    fs::path parameters = program.get<std::string>("--parameter");
+    fs::path out_root;
+    if(program.is_used("--parameter")){
+        out_root = root / parameters.stem();
+    } else {
+        out_root = root / "result";
+    }
 
-    if(is_file)
+    fs::path config_path = root / "config";
+    fs::path log_path = out_root / "logs";
+    if(!fs::exists(log_path))
     {
-        SPDLOG_LOGGER_INFO(logger, "Processing the measure configuration file: {}", path_arg);
-        config_path = path_arg.parent_path();
-        single_cfg_file = path_arg.filename();
+      CREATE_DIR(logger, log_path);
     }
-    else
-    {
-        SPDLOG_LOGGER_INFO(logger, "Processing the measure configuration folder: {}", path_arg);
-        config_path = path_arg;
-    }
-    fs::path cali_path = config_path / "calibrated";
+    fs::path cali_path = out_root / "calibrations";
     if(!fs::exists(cali_path))
     {
       CREATE_DIR(logger, cali_path);
     }
-    fs::path system_cfg_file = "system.ini";
-    system_cfg_file = config_path / system_cfg_file;
 
+    fs::path system_cfg_file = root / "system.ini";
+    rm::SystemCfg sys_;
+    rm::loadSystemConfig(system_cfg_file, sys_);
+    SPDLOG_LOGGER_INFO(logger, "Loaded configuration from {}.", system_cfg_file);
+
+    auto single_cfg_file = program.present<std::string>("--ring-cfg");
+    rm::RingCalibration cali;
     for (const auto& measure_cfg_file : fs::directory_iterator(config_path)) {
-        // Exclude the system configuration file
-        if (measure_cfg_file.path().filename() == system_cfg_file.filename()) {
-            continue; 
-        }
-        // Exclude any folder inside the config folder
-        if(measure_cfg_file.is_directory()){
-            SPDLOG_LOGGER_INFO(logger, "Ignoring directory: {}\n\n\n", measure_cfg_file.path());
-            continue;
-        }
+
         // If the argument is a file, only process that specific file
-        if (is_file && measure_cfg_file.path().filename() != single_cfg_file) {
+        if(single_cfg_file && measure_cfg_file.path().filename() != single_cfg_file) {
             continue;
         }
 
         auto start_time = std::chrono::high_resolution_clock::now();
 
-        std::string ring = measure_cfg_file.path().stem().string();
-        logger=spdlog::basic_logger_mt(ring, "logs/" + ring + ".log", true);
+        fs::path ring = measure_cfg_file.path().filename();
+        logger=spdlog::basic_logger_mt(ring, log_path / ring.replace_extension(".log"), true);
         logger->set_level(spdlog::level::trace);
         logger->set_pattern("[%Y-%m-%d %H:%M:%S] [%l] [%s:%#] %v");
         // wrapper the PCl logger with time and level information
@@ -88,33 +102,30 @@ main (int argc, char* argv[])
         cali.setLogger(logger);
         // system_cfg_file = "config/20260622/calibrated/system_4_ND_20260622_4_19.ini";
         SPDLOG_LOGGER_WARN(logger, "Starting calibration...");
-        assert(fs::exists(measure_cfg_file) && "The measure configuration file does not exist.");
-        assert(fs::exists(system_cfg_file) && "The system configuration file does not exist.");
-        SPDLOG_LOGGER_INFO(logger, "Loading configuration from {} and {}", system_cfg_file, measure_cfg_file.path());
         SPDLOG_LOGGER_INFO(logger, "Processing Ring {}", measure_cfg_file.path().stem());
         SPDLOG_LOGGER_INFO(spdlog::default_logger(), "Processing Ring {}", measure_cfg_file.path().stem());
-        RingMeasure::SystemCfg sys;
-        RingMeasure::MeasureCfg measure;
-        RingMeasure::loadConfig(system_cfg_file, measure_cfg_file.path(), sys, measure);
-        SPDLOG_LOGGER_INFO(logger, "Loaded configuration from {} and {}", system_cfg_file, measure_cfg_file.path());
+        rm::MeasureCfg measure;
+        rm::loadMeasureConfig(measure_cfg_file.path(), measure);
+        SPDLOG_LOGGER_INFO(logger, "Loaded configuration from {}.", measure_cfg_file.path());
         #ifdef RING_MEASURE_VERIFY_ONLY
-        assert(fs::exists(cali_path/measure_cfg_file.path().stem()) && "The binary configuration file does not exist.");
-        std::ifstream in_file(cali_path/measure_cfg_file.path().stem(), std::ios::binary);
-        std::array<RingMeasure::ScanCfg, static_cast<size_t>(rm::ScanLocation::NUM)> &
-            cfgs_read = sys.robot.scans;
+        assert(fs::exists(cali_path/ring.stem()) && "The binary configuration file does not exist.");
+        auto binary = cali_path/ring.stem();
+        std::ifstream in_file(binary, std::ios::binary);
+        std::array<rm::ScanCfg, static_cast<size_t>(rm::ScanLocation::NUM)> &
+            cfgs_read = sys_.robot.scans;
         in_file.read(
                 reinterpret_cast<char*>(cfgs_read.data()),
-                cfgs_read.size() * sizeof(RingMeasure::ScanCfg)
+                cfgs_read.size() * sizeof(rm::ScanCfg)
                 );
         in_file.close();
+        SPDLOG_LOGGER_INFO(logger, "Loaded binary configuration from {}.", binary);
         #endif
 
         cali.setMeasure(measure);
-        cali.setSystem(sys);
+        cali.setSystem(sys_);
     
         // Specify the path to the file system.
-        fs::path root_out_path = "result";
-        fs::path path = root_out_path / (measure.ring.type + "_" + measure_cfg_file.path().stem().string());
+        fs::path path = out_root / (measure.ring.type + "_" + measure_cfg_file.path().stem().string());
         CREATE_DIR(logger, path);
 
         #ifndef RING_MEASURE_VERIFY_ONLY
@@ -154,24 +165,19 @@ main (int argc, char* argv[])
         // Dump the new configuratrion to a ini file.
         // Do not dump the configuration in verifying only mode.
         #ifndef RING_MEASURE_VERIFY_ONLY
-            fs::path new_ini = "system_" + measure_cfg_file.path().filename().string();
-            SPDLOG_LOGGER_INFO(logger, "Dumping the new configuration to {}", cali_path/new_ini);
+            fs::path new_ini = cali_path / ("system_" + measure_cfg_file.path().filename().string());
+            SPDLOG_LOGGER_INFO(logger, "Dumping the new configuration to {}", new_ini);
             auto sys_cali = cali.getSystem();
-            RingMeasure::dumpConfig(cali_path/new_ini, sys_cali);
-            // RingMeasure::dumpConfig(cali_path/new_ini, sys);
+            rm::dumpConfig(new_ini, sys_cali);
             auto calibrated = cali.getSystem().robot.scans;
-            // std::vector<RingMeasure::ScanCfg> cali_cfgs = {sys.robot.in, sys.robot.out, sys.robot.under};
-            // std::vector<RingMeasure::ScanCfg> cali_cfgs = {calibrated.robot.scans[static_cast<size_t>(rm::ScanLocation::In)],
-            //                                                calibrated.robot.out,
-            //                                                calibrated.robot.under};
-            fs::path filename = measure_cfg_file.path().stem().string();
+            fs::path binary_ini = cali_path / measure_cfg_file.path().stem();
             // Open file in output + binary mode
-            SPDLOG_LOGGER_INFO(logger, "Dumping the new binary configuration to {}", cali_path/filename);
-            std::ofstream out_file(cali_path/filename, std::ios::binary);
+            SPDLOG_LOGGER_INFO(logger, "Dumping the new binary configuration to {}", binary_ini);
+            std::ofstream out_file(binary_ini, std::ios::binary);
             assert(out_file.is_open() && "Failed to open file for writing!");
             out_file.write(
                 reinterpret_cast<const char*>(calibrated.data()),
-                calibrated.size() * sizeof(RingMeasure::ScanCfg)
+                calibrated.size() * sizeof(rm::ScanCfg)
             );
             out_file.close();
         #endif
@@ -212,7 +218,7 @@ main (int argc, char* argv[])
         //          return a.indices.size() > b.indices.size(); // Sort in descending order of cluster size
         // });
         // SPDLOG_LOGGER_TRACE(logger, "Write the {} clusters of out segmented to: {}", segmentation_indices.size(), path / "recon_seg");
-        // SPDLOG_EXEC(logger, spdlog::level::trace, RingMeasure::writeSegmentation<pcl::PointNormal>(out, segmentation_indices, path / "recon_seg", "_RecSeg", 10));
+        // SPDLOG_EXEC(logger, spdlog::level::trace, rm::writeSegmentation<pcl::PointNormal>(out, segmentation_indices, path / "recon_seg", "_RecSeg", 10));
         // pcl::PointCloud <pcl::PointXYZRGB>::Ptr colored_cloud = reg.getColoredCloud ();
         // SPDLOG_LOGGER_TRACE(logger, "Saving the colored segmented point cloud to {}", path / "noisy_recon.ply");
         // SPDLOG_EXEC(logger, spdlog::level::trace, pcl::io::savePLYFileASCII(path / "noisy_recon.ply", *colored_cloud));
@@ -290,16 +296,17 @@ main (int argc, char* argv[])
         SPDLOG_LOGGER_WARN(logger, "Total execution time: {} ms", duration.count());
         SPDLOG_LOGGER_INFO(logger, "Finished processing the scan from {}.\n\n\n", measure_cfg_file.path().stem());
     }
-    if(is_file)
+
+    // TODO: 
+    // dump the parameter file.
+
+    if(single_cfg_file)
     {
-        SPDLOG_LOGGER_INFO(spdlog::default_logger(), "Finished processing the measure configuration file: {}", path_arg);
-        config_path = path_arg.parent_path();
-        single_cfg_file = path_arg.filename();
+        SPDLOG_LOGGER_INFO(spdlog::default_logger(), "Finished processing the measure configuration file: {}", single_cfg_file.value());
     }
     else
     {
-        SPDLOG_LOGGER_INFO(spdlog::default_logger(), "Finished processing the measure configuration folder: {}", path_arg);
-        config_path = path_arg;
+        SPDLOG_LOGGER_INFO(spdlog::default_logger(), "Finished processing the measure configuration folder: {}", root);
     }
     // flush all the logs and terminate the threads safely.
     spdlog::shutdown();

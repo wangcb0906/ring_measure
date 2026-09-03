@@ -26,6 +26,7 @@ namespace RingMeasure{
             case ScanLocation::In:    return "In";
             case ScanLocation::Out:   return "Out";
             case ScanLocation::Under: return "Under";
+            default: break;
         }
         return "UNKNOWN";
     }
@@ -79,7 +80,7 @@ namespace RingMeasure{
     {
         int scan_num;
         int scan_res;
-        float interval;
+        int valid_len;
         float z_pitch;
         float z_oft;
         float x_pitch;
@@ -169,9 +170,6 @@ namespace RingMeasure{
         RingCfg ring;
         std::array<Point2f, NUM> robot_pos;
     };
-
-    void loadConfig(const std::string& sys_cfg, const std::string& measure_cfg,
-                    struct SystemCfg& sys, struct MeasureCfg& measure);
 
     void loadMeasureConfig(const std::string& measure_cfg, struct MeasureCfg& measure);
 

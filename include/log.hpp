@@ -16,7 +16,7 @@
 #define CREATE_DIR(logger, path) \
     do { \
         if (fs::create_directories(path)) { \
-            SPDLOG_LOGGER_ERROR(logger, "Created directory: {}", (path).string()); \
+            SPDLOG_LOGGER_INFO(logger, "Created directory: {}", (path).string()); \
         } \
     } while(0)
 

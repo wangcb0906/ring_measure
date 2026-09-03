@@ -2,13 +2,15 @@
     "version": "0.2.0",
     "configurations": [
        {
-            "name": "ring_cali",
+            "name": "ring_cali_lldb",
             "type": "lldb",
             "request": "launch",
             "program": "${workspaceFolder}/ring_cali",
             "cwd": "${workspaceFolder}",
             "args": [
-                "./config/20260622/4_ND_20260622_4_19.ini"
+                "test/20260622",
+                "-r",
+                "4_ND_20260622_4_19.ini"
             ],
             "preLaunchTask": "build_cali",
             "initCommands": [
@@ -21,14 +23,37 @@
         },
 
         {
-            "name": "ring_cali_eval",
+            "name": "ring_cali_gdb",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/ring_cali",
+            "cwd": "${workspaceFolder}",
+            "args": [
+                "test/20260622",
+                "-r",
+                "4_ND_20260622_4_19.ini"
+            ],
+            "preLaunchTask": "build_cali",
+            "MIMode": "gdb",
+            "miDebuggerPath": "/usr/bin/gdb",
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreExisting": true
+                }
+            ]
+        },
+        
+        {
+            "name": "ring_cali_eval_lldb",
             "type": "lldb",
             "request": "launch",
             "program": "${workspaceFolder}/ring_cali_eval",
             "cwd": "${workspaceFolder}",
             "args": [
-                        "./config/20260622",
-                    ],
+                "test/20260622"
+            ],
             "preLaunchTask": "build_cali_eval",
             "initCommands": [
                 "script import sys; sys.path.append('/usr/lib/python3.14/site-packages')",
@@ -37,6 +62,27 @@
                 "command script import ${workspaceFolder}/visual/profile.py",
                 "command script import ${workspaceFolder}/visual/hist.py",
                 "command script import ${workspaceFolder}/visual/eval.py",
+            ]
+        },
+
+        {
+            "name": "ring_cali_eval_gdb",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/ring_cali_eval",
+            "cwd": "${workspaceFolder}",
+            "args": [
+                "test/20260622"
+            ],
+            "preLaunchTask": "build_cali_eval",
+            "MIMode": "gdb",
+            "miDebuggerPath": "/usr/bin/gdb",
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreExisting": true
+                }
             ]
         }
     ]

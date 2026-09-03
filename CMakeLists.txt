@@ -76,7 +76,6 @@ target_link_libraries(${MEASURE} PRIVATE ${CORE_LIB})
 # cmake -B build
 # cmake --build build --target ring_cali -j --clean-first
 # To start a test
-# cmake --build build --target ring_cali -j && ./ring_cali ./config/20260622/4_ND_20260622_4_19.ini
-# cmake --build build --target ring_cali -j && ./ring_cali ./config
+# cmake --build build --target ring_cali -j && ./ring_cali test/20260622 -r 4_ND_20260622_4_19.ini
 # To check the quality of a construction, note that the scans are not well aligned.
 # magick composite -blend 50% result/GR_4_ND_20260622_4_19/in_test_denoise/line_13_in_recon.png result/GR_4_ND_20260622_4_19/out_test_denoise/line_11_out_recon.png  output.png

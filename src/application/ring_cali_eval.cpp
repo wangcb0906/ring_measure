@@ -4,7 +4,6 @@
 #include <iomanip> // to set the precision in inicpp
 #include <inicpp.h>
 
-
 #include <spdlog/spdlog.h>
 #include <spdlog/sinks/basic_file_sink.h>
 #include <spdlog/sinks/stdout_color_sinks.h>
@@ -22,6 +21,7 @@
 // #include <pcl/surface/gp3.h>
 
 #include <boost/multi_array.hpp>
+#include <argparse/argparse.hpp>
 
 int
 main (int argc, char* argv[])
@@ -32,33 +32,52 @@ main (int argc, char* argv[])
     auto logger=spdlog::default_logger();
     logger->set_pattern("[%Y-%m-%d %H:%M:%S] [%l] [%s:%#] %v");
 
-    if(argc != 2) 
-    {
-        SPDLOG_LOGGER_ERROR(logger, "Invalid number of arguments. Usage: {} <measure_config_file/folder>", argv[0]);
-        exit(EXIT_FAILURE);
+    argparse::ArgumentParser program("ring_cali_eval", "0.1");
+    program.add_argument("cali")
+           .help("Folder to calibrate or a single measure configuration file.");
+
+    program.add_argument("-c", "--calibration")
+           .help("Path to the calibration results")
+           .default_value(std::string("result"));
+
+    try {
+        program.parse_args(argc, argv);
+    } catch (const std::exception& err) {
+        SPDLOG_LOGGER_ERROR(logger, "Error parsing arguments: {}", err.what());
+        auto aux = std::ostringstream{};
+        aux << program;
+        SPDLOG_LOGGER_ERROR(logger, "{}", aux.str());
+        return 1;
     }
 
-    fs::path config_path = argv[1];
+    fs::path root = program.get<std::string>("cali");
+    fs::path cali_path = root / program.get<std::string>("--calibration");
+    fs::path config_path = root / "config";
 
-    std::vector<fs::path> calis;
+    std::vector<std::string> calis;
     if (fs::exists(config_path) && fs::is_directory(config_path)) {
         // Populate vector directly using directory iterator range
         SPDLOG_LOGGER_INFO(logger, "Processing the measure configuration folder: {}", config_path);
         for (auto const& entry : fs::directory_iterator(config_path)) {
-            if (entry.is_regular_file()) {
-                calis.push_back(entry.path());
-            }
+            calis.push_back(entry.path().stem().string());
         }
     } else {
         SPDLOG_LOGGER_ERROR(logger, "Directory {} does not exist.", config_path);
         exit(EXIT_FAILURE);
     }
 
-    auto system_cfg_file = config_path / "system.ini";
+    auto system_cfg_file = root / "system.ini";
 
     SPDLOG_LOGGER_WARN(logger, "Starting reconstruction...");
-    fs::path log_path("logs/measure_cali");
+    fs::path log_path(cali_path / "measure_cali");
     CREATE_DIR(logger, log_path);
+
+
+    constexpr std::array<rm::ScanLocation, static_cast<size_t>(rm::ScanLocation::NUM)> scan_locs = {
+        rm::ScanLocation::In,
+        rm::ScanLocation::Out,
+        rm::ScanLocation::Under
+    };
 
     // Create a 3D grid where EVERY cell is a dynamic std::vector
     boost::multi_array<rm::RingCalibration::ScanMetricsArray, 3> eval_scan(
@@ -69,12 +88,16 @@ main (int argc, char* argv[])
         boost::extents[calis.size()][calis.size()]
     );
 
+    rm::SystemCfg sys;
+    rm::loadSystemConfig(system_cfg_file, sys);
+    SPDLOG_LOGGER_INFO(logger, "Loaded configuration from {}.", system_cfg_file);
+
     for (size_t cali_idx = 0; cali_idx < calis.size(); ++cali_idx) {
     
         rm::RingCalibration cali;
         cali.setPhaseType(rm::PhaseType::VERI);
         const auto& cali_cfg_file = calis[cali_idx];
-        logger=spdlog::basic_logger_mt("MeasureCali", log_path / ("[" + std::to_string(cali_idx) + "]" + cali_cfg_file.stem().string() + ".log"), true);
+        logger=spdlog::basic_logger_mt("MeasureCali", log_path / ("[" + std::to_string(cali_idx) + "]=" + cali_cfg_file + ".log"), true);
         logger->set_level(spdlog::level::trace);
         logger->set_pattern("[%Y-%m-%d %H:%M:%S] [%l] [%s:%#] %v");
         // wrapper the PCl logger with time and level information
@@ -82,15 +105,8 @@ main (int argc, char* argv[])
         pcl::console::Logger::getInstance().setCallback(timeLevelCallback);
         cali.setLogger(logger);
 
-        assert(fs::exists(cali_cfg_file) && "The calibration configuration file does not exist.");
-        assert(fs::exists(system_cfg_file) && "The system configuration file does not exist.");
-        SPDLOG_LOGGER_INFO(logger, "Loading configuration from {}.", system_cfg_file);
-        rm::SystemCfg sys;
-        rm::loadSystemConfig(system_cfg_file, sys);
-        SPDLOG_LOGGER_INFO(logger, "Loaded configuration from {}.", system_cfg_file);
         // Read the bianary calibration configuration file
-        // calibration : system_XXXX, substr(7)
-        fs::path cali_cfg_bin = cali_cfg_file.parent_path() / "calibrated" / cali_cfg_file.stem().string();
+        fs::path cali_cfg_bin = cali_path / "calibrations" / cali_cfg_file;
         assert(fs::exists(cali_cfg_bin) && "The binary cali config file does not exist.");
         std::ifstream in_file(cali_cfg_bin, std::ios::binary);
         std::array<RingMeasure::ScanCfg, static_cast<size_t>(rm::ScanLocation::NUM)> &
@@ -101,33 +117,29 @@ main (int argc, char* argv[])
                 );
         in_file.close();
         cali.setSystem(sys);
-        fs::path root_out_path = "result/measure_cali_" + cali_cfg_file.stem().string();
+
+        fs::path root_out_path = root / ("measure_cali_" + cali_cfg_file);
         CREATE_DIR(logger, root_out_path);
-        fs::path path = root_out_path / (cali_cfg_file.stem().string());
+        fs::path path = root_out_path / cali_cfg_file;
         auto start_time = std::chrono::high_resolution_clock::now();
         // Start to evaluate the calibration results
 
         for (size_t eval_idx = 0; eval_idx < calis.size(); ++eval_idx)
         {
             const auto& ring = calis[eval_idx];
-            fs::path ring_path = root_out_path / (ring.stem().string());
+            fs::path ring_path = root_out_path / ring;
             CREATE_DIR(logger, ring_path);
-            SPDLOG_LOGGER_CRITICAL(logger, "Processing Ring {} with config {}", ring.filename(),  cali_cfg_file.filename());
+            SPDLOG_LOGGER_CRITICAL(logger, "Processing Ring {} with config {}", ring,  cali_cfg_file);
             rm::MeasureCfg measure;
-            rm::loadMeasureConfig(ring, measure);
+            rm::loadMeasureConfig(config_path / (ring + ".ini"), measure);
             cali.setMeasure(measure);
-            constexpr std::array<rm::ScanLocation, static_cast<size_t>(rm::ScanLocation::NUM)> scan_locs = {
-                rm::ScanLocation::In,
-                rm::ScanLocation::Out,
-                rm::ScanLocation::Under
-            };
             for (const auto& scan : scan_locs)
             {
                 cali.verification(scan, ring_path, true);
                 auto loc = static_cast<size_t>(scan);
                 // /py
                 eval_scan[loc][cali_idx][eval_idx] = cali.scanEval();
-                if(ring.string().find("_3_1") != std::string::npos)
+                if(ring.find("_3_1") != std::string::npos)
                 {
                     eval_scan[loc][cali_idx][eval_idx][static_cast<size_t>(rm::RingCalibration::ScanMetrics::H_PLANE_FIT)] -= 10;
                 }

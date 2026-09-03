@@ -65,9 +65,10 @@ void RingMeasure::RingCalibration::reconstruct(std::string path)
     std::vector<float> x;
     x.resize(system.sensor.scan_res);
 
+    float aux = static_cast<float>(system.sensor.valid_len) / static_cast<float>(system.sensor.scan_res);
     for (int i=0; i<system.sensor.scan_res; ++i)
     {
-        x[i] = system.sensor.interval * (system.sensor.scan_res/2.0 - i) * is_under;
+        x[i] = aux * (system.sensor.scan_res/2l - i) * is_under;
     }
 
     raw_recs[IDX] = pcl::PointCloud<pcl::PointXYZ>::Ptr(new pcl::PointCloud<pcl::PointXYZ>);

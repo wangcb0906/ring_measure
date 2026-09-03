@@ -480,6 +480,7 @@ namespace RingMeasure {
             case rm::ScanLocation::In:
                 system.robot.scans[loc].angle_corr += angle_est[loc];
                 break;
+            default: break;
         }
 
         bases[loc].reset(new pcl::PointCloud<pcl::PointNormal>());
@@ -524,6 +525,7 @@ namespace RingMeasure {
                 system.robot.scans[loc].pos_corr -= under_correction;
                 break;
             }
+            default: break;
         }
         SPDLOG_LOGGER_INFO(logger, "Calibration for '{}' scan completed.\n", ss);
     }
