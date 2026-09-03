@@ -1,7 +1,6 @@
 // #define WITHOUT_NUMPY
 // #include <matplotlibcpp.h>
 #include "cali.hpp"
-#include "denoise.hpp"
 #include "log.hpp"
 #include "3rdparty/mad.hpp"
 #include <spdlog/spdlog.h>
@@ -99,19 +98,14 @@ namespace RingMeasure {
             raw_recs[loc].reset();
         }
         
-        // Set the parameters for the Euclidean Cluster Extraction
-        // The distance should be the max sampling distance between the points.
-        // That is, sampling distance = Ring_Da * M_PI / 360.
-        float cluster_tolerance = measure.ring.dA * M_PI / 360.0f + 1.5f;
+
         std::string prefix;
-        if(phase_type == rm::PhaseType::VERI)
+        if(phase_type != rm::PhaseType::VERI)
         {
-            prefix = "";
-        } else {
             prefix = std::string(processTypeToString(process_type)) + "_";
         }
-        pcl::PointCloud<pcl::PointXYZ>::Ptr out_denoised = 
-            rm::ecExtract(out, cluster_tolerance, 100, path_den, prefix, scan_loc, logger);
+
+        pcl::PointCloud<pcl::PointXYZ>::Ptr out_denoised = ecExtract(out, 100, path_den, prefix);
         // write the point cloud to disk
         fs::path file_name = prefix + "original_recon_" + str(ss) + ".ply";
         SPDLOG_LOGGER_INFO(logger, "Reconstructed point cloud from {} scan: {} points", str(ss), out->size());
@@ -135,8 +129,7 @@ namespace RingMeasure {
       
         auto & lateral = laterals[loc];
         auto & base = bases[loc];
-        rec_normals[loc] = rm::normalSegmentation(out_denoised, camera_resolution, mid_height,
-                           path_seg, prefix, lateral, base, scan_loc, logger);
+        rec_normals[loc] = normalSegmentation(out_denoised, path_seg, prefix, lateral, base);
     }
 
     void RingCalibration::caliRot(fs::path path_SAC)

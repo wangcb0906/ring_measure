@@ -153,16 +153,13 @@ namespace {
 
 namespace RingMeasure {
 
-    pcl::PointCloud<pcl::PointXYZ>::Ptr ecExtract(
+    pcl::PointCloud<pcl::PointXYZ>::Ptr RingCalibration::ecExtract(
         const pcl::PointCloud<pcl::PointXYZ>::Ptr& input,
-        float& cluster_tolerance,
         int min_cluster_size,
-        std::filesystem::path path,
-        std::string prefix,
-        const rm::ScanLocation& scan_loc,
-        const std::shared_ptr<spdlog::logger> &logger)
+        fs::path path,
+        const std::string prefix)
     {
-        namespace spdl=spdl;
+        // namespace spdl=spdlog::level;
         // get the logger system
         // auto logger = spdlog::get("Cali");
         // 1. Create a KdTree for fast spatial search
@@ -174,7 +171,7 @@ namespace RingMeasure {
       
         // 3. Configure EuclideanClusterExtractor
         pcl::EuclideanClusterExtraction<pcl::PointXYZ> ec;
-        ec.setClusterTolerance(cluster_tolerance);
+        ec.setClusterTolerance(camera_resolution + 1.5f);
         ec.setMinClusterSize(min_cluster_size);
         ec.setMaxClusterSize(input->size());
         ec.setSearchMethod(tree);
@@ -304,16 +301,12 @@ namespace RingMeasure {
         return out;
     }
 
-    pcl::PointCloud<pcl::PointNormal>::Ptr normalSegmentation(
+    pcl::PointCloud<pcl::PointNormal>::Ptr RingCalibration::normalSegmentation(
         const pcl::PointCloud<pcl::PointXYZ>::Ptr& input,
-        int& camera_resolution,
-        const float& mid_height,
         std::filesystem::path path,
         std::string prefix,
         pcl::PointCloud<pcl::PointNormal>::Ptr& lateral,
-        pcl::PointCloud<pcl::PointNormal>::Ptr& base,
-        const rm::ScanLocation& scan_loc,
-        const std::shared_ptr<spdlog::logger> &logger)
+        pcl::PointCloud<pcl::PointNormal>::Ptr& base)
         {
             // get the logger system
             // auto logger = spdlog::get("Cali");

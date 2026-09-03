@@ -182,6 +182,21 @@ namespace RingMeasure {
             void denoise(fs::path path_den, fs::path path_seg, bool free_raw=true);
             void caliRot(fs::path path);
             void caliTrans(fs::path path);
+            pcl::PointCloud<pcl::PointXYZ>::Ptr
+            ecExtract(const pcl::PointCloud<pcl::PointXYZ>::Ptr& input,
+                      int min_cluster_size,
+                      fs::path path,
+                      const std::string prefix
+            );
+
+            pcl::PointCloud<pcl::PointNormal>::Ptr
+            normalSegmentation(
+                const pcl::PointCloud<pcl::PointXYZ>::Ptr& input,
+                fs::path path,
+                const std::string prefix,
+                pcl::PointCloud<pcl::PointNormal>::Ptr& lateral,
+                pcl::PointCloud<pcl::PointNormal>::Ptr& base
+            );
     
         protected:
 
