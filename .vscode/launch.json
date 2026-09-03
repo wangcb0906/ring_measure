@@ -1,0 +1,43 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+       {
+            "name": "ring_cali",
+            "type": "lldb",
+            "request": "launch",
+            "program": "${workspaceFolder}/ring_cali",
+            "cwd": "${workspaceFolder}",
+            "args": [
+                "./config/20260622/4_ND_20260622_4_19.ini"
+            ],
+            "preLaunchTask": "build_cali",
+            "initCommands": [
+                "script import sys; sys.path.append('/usr/lib/python3.14/site-packages')",
+                "command script import ${workspaceFolder}/visual/parse.py",
+                "command script import ${workspaceFolder}/visual/line.py",
+                "command script import ${workspaceFolder}/visual/profile.py",
+                "command script import ${workspaceFolder}/visual/hist.py",
+            ]
+        },
+
+        {
+            "name": "ring_cali_eval",
+            "type": "lldb",
+            "request": "launch",
+            "program": "${workspaceFolder}/ring_cali_eval",
+            "cwd": "${workspaceFolder}",
+            "args": [
+                        "./config/20260622",
+                    ],
+            "preLaunchTask": "build_cali_eval",
+            "initCommands": [
+                "script import sys; sys.path.append('/usr/lib/python3.14/site-packages')",
+                "command script import ${workspaceFolder}/visual/parse.py",
+                "command script import ${workspaceFolder}/visual/line.py",
+                "command script import ${workspaceFolder}/visual/profile.py",
+                "command script import ${workspaceFolder}/visual/hist.py",
+                "command script import ${workspaceFolder}/visual/eval.py",
+            ]
+        }
+    ]
+}
