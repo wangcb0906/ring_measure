@@ -60,6 +60,7 @@ namespace {
     // The normal in PCL is stored as float.
     float getNormalThld(const pcl::PointCloud<pcl::PointNormal>::Ptr& cloud,
                         const std::filesystem::path ply_path,
+                        const RingMeasure::RegionGrowing& params,
                         const std::shared_ptr<spdlog::logger> &logger)
     {
 
@@ -139,8 +140,19 @@ namespace {
         // 2 points divided by 3
         // 3 points divded by 2
         // 4 points, keep the minimal
-        // float thld = *std::min_element(diffs.begin() + 1, diffs.end()) / (5 - diffs.size());
-        float thld = *std::min_element(diffs.begin() + 1, diffs.end()) / 2.0f;
+        float thld;
+        if(params.normal_thld_mode == RingMeasure::Modes::MODE1)
+        {
+            thld = *std::min_element(diffs.begin() + 1, diffs.end()) / (5 - diffs.size());
+        } else if(params.normal_thld_mode == RingMeasure::Modes::MODE2)
+        {
+            thld = *std::min_element(diffs.begin() + 1, diffs.end()) / 2.0f;
+        } else
+        {   
+            SPDLOG_LOGGER_ERROR(logger, "Invalid normal threshold mode: {}", static_cast<int>(params.normal_thld_mode));
+            exit(EXIT_FAILURE);
+        }
+
         SPDLOG_LOGGER_TRACE(logger, "Size of differences: {}", diffs.size());
         SPDLOG_LOGGER_TRACE(logger, "Differences between adjacent centroids: {}", fmt::join(diffs, ", "));
         SPDLOG_LOGGER_TRACE(logger, "Saving the visualized clustering of normal to {}.", ply_path);
@@ -179,11 +191,11 @@ namespace RingMeasure {
       
         // 4. Extract clusters
         {
-        auto start_time = std::chrono::high_resolution_clock::now();
-        ec.extract(ec_out_indices);
-        auto end_time = std::chrono::high_resolution_clock::now();
-        SPDLOG_LOGGER_INFO(logger, "Euclidean Cluster Extraction completed in {} ms", 
-                     std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count());
+            auto start_time = std::chrono::high_resolution_clock::now();
+            ec.extract(ec_out_indices);
+            auto end_time = std::chrono::high_resolution_clock::now();
+            SPDLOG_LOGGER_INFO(logger, "Euclidean Cluster Extraction completed in {} ms", 
+                std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count());
         }
       
         pcl::PointCloud<pcl::PointXYZRGB>::Ptr colored_ec_out = rm::colorizeClusters(input, ec_out_indices);
@@ -192,7 +204,7 @@ namespace RingMeasure {
             return a.indices.size() > b.indices.size(); // Sort in descending order of cluster size
         });
       
-        SPDLOG_LOGGER_DEBUG(logger, "Write the {} clusters of out denoised to: {}", ec_out_indices.size(), path);
+        SPDLOG_LOGGER_DEBUG(logger, "Writing the {} clusters of out denoised to: {}", ec_out_indices.size(), path);
         SPDLOG_EXEC(logger, spdl::debug, rm::writeSegmentation<pcl::PointXYZ>(input, ec_out_indices, path, prefix + "ECSeg_", 100, logger));
         // rm::writeSegmentation<pcl::PointXYZ>(input, ec_out_indices, path, prefix + "ECSeg_", 100, logger);
         // write the point cloud to disk 
@@ -308,6 +320,7 @@ namespace RingMeasure {
         pcl::PointCloud<pcl::PointNormal>::Ptr& lateral,
         pcl::PointCloud<pcl::PointNormal>::Ptr& base)
         {
+            auto params = getParam().reg_growing;
             // get the logger system
             // auto logger = spdlog::get("Cali");
             namespace spdl=spdl;
@@ -318,7 +331,7 @@ namespace RingMeasure {
             tree->setInputCloud (input);
             normal_estimator.setSearchMethod (tree);
             normal_estimator.setInputCloud (input);
-            normal_estimator.setRadiusSearch (camera_resolution*1.2);
+            normal_estimator.setRadiusSearch (camera_resolution*params.radius_ratio);
             // Set all the normals point into the center of the cylinder, which is (0, mid_height, 0)
             // later we can reverse the normals to point outside of the surface
             // which is a requirement for many applications.
@@ -336,25 +349,44 @@ namespace RingMeasure {
             pcl::concatenateFields(*input, *normals, *input_with_normals);
             
             pcl::RegionGrowing<pcl::PointXYZ, pcl::Normal> reg;
-            reg.setResidualThreshold (camera_resolution * 0.75f);
-            reg.setMinClusterSize (1);
+            reg.setResidualThreshold (camera_resolution * params.residual_ratio);
+            reg.setMinClusterSize (params.min_cluster_size);
             reg.setMaxClusterSize (input->size());
             tree->setInputCloud (input);
             reg.setSearchMethod (tree);
-            reg.setNumberOfNeighbours (8);
+            reg.setNumberOfNeighbours (params.num_neighbors);
             reg.setInputCloud (input);
             reg.setInputNormals (normals);
 
             auto nan_curv_removed =  removeCurvatureNan(input_with_normals, logger);
-            float curv_thld = getCurvThld(nan_curv_removed, logger);
-            reg.setCurvatureThreshold (curv_thld);
-            float normal_thld = getNormalThld(nan_curv_removed, path / (prefix + "normal_clustering_visualization.ply"), logger);
-            reg.setSmoothnessThreshold (normal_thld);
+            if(params.curvature_type == OperationMode::MANUAL)
+            {
+                reg.setCurvatureThreshold (params.curvature_thld);
+            } else if(params.curvature_type == OperationMode::AUTO)
+            {
+                float curv_thld = getCurvThld(nan_curv_removed, logger);
+                reg.setCurvatureThreshold (curv_thld);
+                SPDLOG_LOGGER_INFO(logger, "Curvature threshold is automatically determined.");
+            } else 
+            {
+                SPDLOG_LOGGER_ERROR(logger, "Invalid curvature threshold type: {}", static_cast<int>(params.curvature_type));
+                exit(EXIT_FAILURE);
+            }
 
-            #ifdef RING_MEASURE_RG_MANUAL
-            reg.setCurvatureThreshold (0.1); 
-            reg.setSmoothnessThreshold (10.0 / 180.0 * M_PI);
-            #endif
+            if(params.normal_type == OperationMode::MANUAL)
+            {
+                reg.setSmoothnessThreshold (params.smooth_thld);
+            } else if(params.normal_type == OperationMode::AUTO)
+            {
+                
+                float normal_thld = getNormalThld(nan_curv_removed, path / (prefix + "normal_clustering_visualization.ply"), params,logger);
+                reg.setSmoothnessThreshold (normal_thld);
+                SPDLOG_LOGGER_INFO(logger, "Smoothness threshold is automatically determined.");
+            } else 
+            {
+                SPDLOG_LOGGER_ERROR(logger, "Invalid smoothness threshold type: {}", static_cast<int>(params.normal_type));
+                exit(EXIT_FAILURE);
+            }
 
             SPDLOG_EXEC(logger, spdl::debug, visualizeCurvature(nan_curv_removed, 0.0, 
                 path / (prefix + "curvature.ply"), logger));
@@ -435,7 +467,7 @@ namespace RingMeasure {
                 // We usually have three kinds of segments, the first kind with the most points,
                 // which are parts of the lateral, the second kind with moderate number of points, which are
                 // parts of the base, and the third kind with the least number of points, which are noise.
-                int k = 3; // number of clusters in k-means
+                int k = params.cluster_size; // number of clusters in k-means
                 for (int i = 0; i < num_of_segs; ++i)
                 {
                     feature.at<float>(i, 0) = seg_indices[i].indices.size();
@@ -477,7 +509,7 @@ namespace RingMeasure {
                     std::swap(y1, y2);
                     labels_y = 1 - labels_y; // swap the labels accordingly
                 }
-                SPDLOG_LOGGER_INFO(logger, "The y coordinate of the two clusters are: {} and {}", y1, y2);
+                SPDLOG_LOGGER_INFO(logger, "The y coordinate of the lateral and base clusters are: {} and {}", y1, y2);
 
                 pcl::PointIndices::Ptr lateral_indices(new pcl::PointIndices);
                 pcl::PointIndices::Ptr base_indices(new pcl::PointIndices);

@@ -73,6 +73,7 @@ namespace RingMeasure {
     {
         auto ss = scanLocationToString(scan_loc);
         auto out = raw_recs[loc];
+        auto misc = getParam().misc;
 
         Eigen::Vector4f min_pt, max_pt;
         pcl::getMinMax3D(*out, min_pt, max_pt);
@@ -85,7 +86,7 @@ namespace RingMeasure {
             pcl::VoxelGrid<pcl::PointXYZ> vox;
             vox.setInputCloud(out);
             // set the resample to 1.0 would yield too index overflow.
-            float resample = 1.5f; // Set downsampling for Euclidean clustering
+            float resample = misc.leaf_size_before_EC; // Set downsampling for Euclidean clustering
             vox.setLeafSize(resample, resample, resample); // Set the voxel size (adjust as needed)
             pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_filtered (new pcl::PointCloud<pcl::PointXYZ>);
             vox.filter(*cloud_filtered);
@@ -118,10 +119,12 @@ namespace RingMeasure {
         pcl::VoxelGrid<pcl::PointXYZ> vox;
         vox.setInputCloud(out_denoised);
         if(scan_loc == RingMeasure::ScanLocation::Under)
-        {
-            vox.setLeafSize(resample/2, resample/2, resample/2); // Set the voxel size (adjust as needed)
+        {   
+            auto resample = camera_resolution * misc.resample_ratio * misc.under_resampling_ratio_for_ne;
+            vox.setLeafSize(resample, resample, resample); // Set the voxel size (adjust as needed)
         } else 
-        {
+        {   
+            auto resample = camera_resolution * misc.resample_ratio * misc.io_resampling_ratio_for_ne;
             vox.setLeafSize(resample, resample, resample);
         }
         pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_filtered (new pcl::PointCloud<pcl::PointXYZ>);
@@ -134,6 +137,7 @@ namespace RingMeasure {
 
     void RingCalibration::caliRot(fs::path path_SAC)
     {
+        auto params = getParam().primitive;
         auto lateral = laterals[loc];
           
         // extract the bounding box of the lateral
@@ -148,7 +152,8 @@ namespace RingMeasure {
         // We start to cut the cone from the bottom with an offset of 0.25*resample and end at the top 
         // with an offset of 0.25*resample. 
         // The number of slices is determined by the height of the cone.
-        // Then we recalculate the sample distance between each slice. 
+        // Then we recalculate the sample distance between each slice.
+        auto resample = camera_resolution * getParam().misc.resample_ratio; 
         float min_height = min_pt.y(), max_height = max_pt.y();
         float start_pos = min_height + 0.25 * resample;
         float end = max_height - 0.25 * resample;
@@ -188,11 +193,9 @@ namespace RingMeasure {
                 SPDLOG_EXEC(logger, spdl::trace, pcl::io::savePLYFileASCII(filename, *slices[i]));
             }
             // fit an ellipse if we have enough points.
-            int threshold = std::max(120, static_cast<int>(lateral->size()/num_slices*0.9f));
             // at least 1% of the total points or 120 points
-            float ratio = 0.666; // only when we have enough points, fit the ellipse.
-            if(scan_loc == RingMeasure::ScanLocation::Under) ratio *= 0.5;
-            //   if(slices[i]->size() > 360 * ratio)
+            int threshold = std::max(params.ellipse_fit_num_thld, static_cast<int>(lateral->size()/num_slices*0.9f));
+
             if(slices[i]->size() > threshold)
             {
                 pcl::SACSegmentation<pcl::PointNormal> seg;
@@ -200,9 +203,8 @@ namespace RingMeasure {
                 seg.setModelType(pcl::SACMODEL_ELLIPSE3D);
                 seg.setMethodType(pcl::SAC_RANSAC);
                 seg.setInputCloud(slices[i]);
-                seg.setDistanceThreshold(0.1); // out
-                // seg.setDistanceThreshold(0.1); // in
-                seg.setMaxIterations(2000);
+                seg.setDistanceThreshold(params.ellipse_fit_dist_thld);
+                seg.setMaxIterations(params.ellipse_fit_max_iter);
     
                 pcl::PointIndices::Ptr inliers(new pcl::PointIndices);
                 pcl::ModelCoefficients::Ptr coefficients(new pcl::ModelCoefficients);
@@ -252,12 +254,11 @@ namespace RingMeasure {
         SPDLOG_LOGGER_INFO(logger, "[Major] Estimated angle of the cone: {} degrees.", std::atan2(line_major[1], line_major[0]) * 180 / M_PI);
         SPDLOG_LOGGER_INFO(logger, "[Minor] Estimated angle of the cone: {} degrees.", angle_est[loc]);
         
-        #ifndef RING_MEASURE_VERI_MAD_DISABLED
-        if(rm::PhaseType::VERI == phase_type)
+        if(params.slices_mad_enabled && rm::PhaseType::VERI == phase_type)
         {
             SPDLOG_LOGGER_DEBUG(logger, "Radius and angle estimation from line fitting enabled for verification.");
             // See mad.hpp to tune the threshold for outlier detection
-            MADDetector<float> mad_detector(2.0);
+            MADDetector<float> mad_detector(params.mad_thld);
             std::vector<float> major_radii, minor_radii;
             for (const auto& pt : points_major) {
                 major_radii.push_back(pt.y);
@@ -276,7 +277,6 @@ namespace RingMeasure {
             SPDLOG_LOGGER_DEBUG(logger, "[Major] MAD: Estimated radius of the line fitting: {}.", radius_eval[loc][static_cast<size_t>(AxisType::MAJOR)]);
             SPDLOG_LOGGER_DEBUG(logger, "[Minor] MAD: Estimated radius of the line fitting: {}.", radius_eval[loc][static_cast<size_t>(AxisType::MINOR)]);
         }
-        #endif
     }
 
     void
@@ -285,6 +285,7 @@ namespace RingMeasure {
         auto base = bases[loc];
         auto lateral = laterals[loc];
         float diameter = measure.ring.dA;
+        auto params = getParam().primitive;
 
         fs::path file_base = path_SAC / "base.ply";
         fs::path file_lateral = path_SAC / "lateral.ply";
@@ -311,11 +312,11 @@ namespace RingMeasure {
         seg.setOptimizeCoefficients(true);
         seg.setModelType(pcl::SACMODEL_CYLINDER);
         seg.setMethodType(pcl::SAC_RANSAC);
-        seg.setNormalDistanceWeight(0.1); 
-        seg.setMaxIterations(10000);
+        seg.setNormalDistanceWeight(params.cylinder_fit_normal_weight);
+        seg.setMaxIterations(params.cylinder_fit_max_iter);
         // The maximum allowable Euclidean distance (in meters) from a 3D point
         // to the outer surface of the candidate cylinder for that point to be considered an inlier
-        seg.setDistanceThreshold(0.5); 
+        seg.setDistanceThreshold(params.cylinder_fit_dist_thld); 
         // seg.setDistanceThreshold(0.1); 
         seg.setRadiusLimits(10.0, diameter/2.0*1.5);
     
@@ -367,9 +368,9 @@ namespace RingMeasure {
         // Always set the table at the height of 982mm.
         seg.setModelType(pcl::SACMODEL_NORMAL_PLANE);
         seg.setRadiusLimits(0.0, std::numeric_limits<double>::max());
-        seg.setDistanceThreshold(0.1);
-        seg.setNormalDistanceWeight(0.1);
-        seg.setMaxIterations(1000);
+        seg.setDistanceThreshold(params.plane_fit_dist_thld);
+        seg.setNormalDistanceWeight(params.plane_fit_normal_weight);
+        seg.setMaxIterations(params.plane_fit_max_iter);
         seg.setOptimizeCoefficients(true);
         seg.setInputCloud(base);
         seg.setInputNormals(base);
@@ -433,24 +434,19 @@ namespace RingMeasure {
     void RingCalibration::
     calibration(const rm::ScanLocation& scan,
                 const fs::path& path)
-    {
+    {   
+        if(!isReady()) {
+            SPDLOG_LOGGER_ERROR(logger, "Calibration is not ready.\nPlease ensure that the system ans measure configurations are properly initialized.");
+        }
         auto ss = scanLocationToString(scan);
         setScanLoc(scan);
         auto path_den = path / (str(ss) + "_cali_denoise");
-        if(!fs::exists(path_den))
-        {
-            bool flag = fs::create_directories(path_den);
-        }
+        CREATE_DIR(logger, path_den);
         auto path_seg = path / (str(ss) + "_cali_segment");
-        if(!fs::exists(path_seg))
-        {
-            bool flag = fs::create_directories(path_seg);
-        }
+        CREATE_DIR(logger, path_seg);
         auto path_SAC = path / (str(ss) + "_cali_slices");
-        if(!fs::exists(path_SAC))
-        {
-            bool flag = fs::create_directories(path_SAC);
-        }
+        CREATE_DIR(logger, path_SAC);
+
         SPDLOG_LOGGER_INFO(logger, std::string(60, '='));
         SPDLOG_LOGGER_INFO(logger, "Setting the location to '{}'.", ss);
         SPDLOG_LOGGER_INFO(logger, std::string(60, '='));
@@ -535,23 +531,17 @@ namespace RingMeasure {
                  const fs::path& path,
                  bool profile)
     {
+        if(!isReady()) {
+            SPDLOG_LOGGER_ERROR(logger, "Calibration is not ready.\nPlease ensure that the system ans measure configurations are properly initialized.");
+        }
         auto ss = scanLocationToString(scan);
         setScanLoc(scan);
         auto path_den = path / (str(ss) + "_veri_denoise");
-        if(!fs::exists(path_den))
-        {
-            bool flag = fs::create_directories(path_den);
-        }
+        CREATE_DIR(logger, path_den);
         auto path_seg = path / (str(ss) + "_veri_segment");
-        if(!fs::exists(path_seg))
-        {
-            bool flag = fs::create_directories(path_seg);
-        }
+        CREATE_DIR(logger, path_seg);
         auto path_SAC = path / (str(ss) + "_veri_slices");
-        if(!fs::exists(path_SAC))
-        {
-            bool flag = fs::create_directories(path_SAC);
-        }
+        CREATE_DIR(logger, path_SAC);
         SPDLOG_LOGGER_INFO(logger, std::string(60, '='));
         SPDLOG_LOGGER_INFO(logger, "Setting the location to '{}'.", ss);
         SPDLOG_LOGGER_INFO(logger, std::string(60, '='));

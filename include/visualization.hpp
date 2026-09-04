@@ -9,10 +9,30 @@
 
 namespace RingMeasure
 {
+
+    /**
+     * @brief Colorizes segmented point cloud clusters with RGB values.
+     * The colors are randomly assigned to each cluster for visualization purposes.
+     * 
+     * @param input_cloud Pointer to the original input point cloud (PointXYZ).
+     * @param cluster_indices Vector containing index sets for each extracted cluster.
+     * @return pcl::PointCloud<pcl::PointXYZRGB>::Ptr A new point cloud with color-coded clusters.
+     */
     pcl::PointCloud<pcl::PointXYZRGB>::Ptr colorizeClusters(
         const pcl::PointCloud<pcl::PointXYZ>::Ptr& input_cloud,
         const std::vector<pcl::PointIndices>& cluster_indices);
 
+    /**
+     * @brief Writes individual point cloud clusters to disk as PLY files.
+     * 
+     * @tparam PointT The point type (e.g., pcl::PointXYZ, pcl::PointNormal).
+     * @param input_cloud Pointer to the source point cloud.
+     * @param indices Vector of point indices defining the clusters.
+     * @param path Target directory path where cluster files will be saved.
+     * @param prefix String prefix to prepend to each saved cluster filename.
+     * @param num_threshold Minimum point count threshold; clusters smaller than this are ignored.
+     * @param logger Shared pointer to the spdlog logger instance.
+     */
     template <typename PointT>
     void writeSegmentation (
         const typename pcl::PointCloud<PointT>::Ptr& input_cloud,
@@ -59,15 +79,42 @@ namespace RingMeasure
     
     }
 
+    /**
+     * @brief Visualizes and exports curvature data for point clouds.
+     * 
+     * @param cloud Pointer to the input point cloud with normal data.
+     * @param threshold Curvature threshold value used for filtering or highlighting.
+     *                  If threshold is not zero, points will be binarized.
+     *                  Otherwise the curvature values will be visualized with max-min normalization.
+     * @param ply_path File path to export the resulting PLY visualization.
+     * @param logger Shared pointer to the spdlog logger instance.
+     */
     void visualizeCurvature(const pcl::PointCloud<pcl::PointNormal>::Ptr cloud,
                             float threshold,
                             std::filesystem::path ply_path,
                             const std::shared_ptr<spdlog::logger> &logger);
-                          
+
+    /**
+     * @brief Visualizes and exports surface normals for point clouds.
+     * @details The point cloud are colored based on the angle between the normal vector and the y-axis.
+     * 
+     * @param cloud Pointer to the input point cloud containing normals.
+     * @param ply_path File path to export the resulting PLY visualization.
+     * @param logger Shared pointer to the spdlog logger instance.
+     */
     void visualizeNormal(const pcl::PointCloud<pcl::PointNormal>::Ptr cloud,
                             std::filesystem::path ply_path,
                             const std::shared_ptr<spdlog::logger> &logger);
 
+    /**
+     * @brief Visualizes obliquity characteristics based on ring calibration data.
+     * @details This function put the three based together and colorizes the point cloud based
+     *          on y coordinates within itself. The consistency of the order of the colors proves
+     *          a good calibration.
+     * 
+     * @param cali Reference to the RingCalibration parameters.
+     * @param ply_path File path to save or load the associated point cloud data.
+     */
     void
     visualizeObliquity(const RingCalibration& cali, fs::path ply_path);
 }

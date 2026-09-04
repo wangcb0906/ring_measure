@@ -1,6 +1,7 @@
 #pragma once
 
 #include "config.hpp"
+#include "param.hpp"
 #include <Eigen/Core>
 #include <spdlog/spdlog.h>
 #include <pcl/point_types.h>
@@ -11,23 +12,40 @@ namespace RingMeasure {
     namespace rm = RingMeasure;
     namespace fs=std::filesystem;
 
+    /**
+     * @brief Core calibration and verification engine for ring measurement systems.
+     * @details Manages point cloud processing pipelines, geometric fitting (planes, cylinders, lines),
+     *          and evaluation metrics across various scan positions.
+     */
     class RingCalibration{
-
-
         public:
-            
+
+            /**
+             * @brief Construct a new RingCalibration object with default settings.
+             * Note that the measure and system must be set before performing any calibration or verification operations.
+             */
             RingCalibration() = default;
-        
+
+            /**
+             * @brief Construct a new RingCalibration object using measurement and system configurations.
+             * 
+             * @param measure Measurement configuration parameters.
+             * @param system System and robot configuration parameters.
+             */
             RingCalibration(const rm::MeasureCfg& measure, const rm::SystemCfg& system)
              : measure(measure), system(system)
             {
                 logger = spdlog::default_logger();;
                 camera_resolution = measure.ring.dA * M_PI / 360.0f;
-                resample = camera_resolution * 0.75f;
                 mid_height = measure.ring.h/2.0 + system.robot.table_h - system.robot.wedge_h;
                 smallest_value = system.sensor.z_oft/1.0e5  - system.sensor.mount_height;
+                measure_ready = true;
+                system_ready = true;
             };
-            
+
+            /**
+             * @brief Destroy the RingCalibration object and release allocated point cloud resources.
+             */
             ~RingCalibration()
             {
                 for (size_t i = 0; i < NUM; ++i)
@@ -39,30 +57,28 @@ namespace RingMeasure {
                 }
             };
 
+            /// @brief Evaluation metrics calculated for individual scan poses.
             enum class ScanMetrics{
-                // metrics for the bases
-                H_PLANE_FIT,           // yes base_fit[0][0]
-                // metrics for the lateral itself
-                ANGLE_MAJOR_LINE_FIT,  // yes angle_eval[0][0]
-                ANGLE_MINOR_LINE_FIT,  // yes angle_eval[0][1]
-                RADIUS_MAJOR_LINE_FIT, // yes radius_eval[0][1]
-                RADIUS_MINOR_LINE_FIT, // yes radius_eval[0][1]
-                RADIUS_CYL_FIT,        // yes cyl_fit_eval[0][0]
-                NUM
+                H_PLANE_FIT,         ///< Base plane fit evaluation metric
+                ANGLE_MAJOR_LINE_FIT,  ///< Major line angle evaluation metric
+                ANGLE_MINOR_LINE_FIT,  ///< Minor line angle evaluation metric
+                RADIUS_MAJOR_LINE_FIT, ///< Major line radius evaluation metric
+                RADIUS_MINOR_LINE_FIT, ///< Minor line radius evaluation metric
+                RADIUS_CYL_FIT,        ///< Cylinder fit radius evaluation metric
+                NUM                    ///< Total number of scan metrics
             };
             
+            /// @brief Global reconstruction metrics evaluated across multi-position scans.
             enum class ReconMetrics{
-                // metrics for the lateral
-                CENTER_CYL_FIT,        // yes cyl_fit_eval[0][1]
-                AXIS_CYL_FIT,          // yes cyl_fit_eval[0][2]
-                // metrics for the bases
-                BASE_PARALLELISM,      // yes base_fit[0][1]
-                NUM
+                CENTER_CYL_FIT,        ///< Center cylinder fit distance metric
+                AXIS_CYL_FIT,          ///< Cylinder axis alignment metric
+                BASE_PARALLELISM,      ///< Base planes parallelism metric
+                NUM                    ///< Total number of reconstruction metrics
             };
 
-            // height, normal
+            /// @brief Tuple type for base fit metrics (height, normal).
             using BaseFitMetricTuple = std::tuple<float, Eigen::Vector3f>;
-            // radius, axis, center
+            /// @brief Tuple type for cylinder fit metrics (radius, axis, center)
             using CYLFitMetricTuple = std::tuple<float, Eigen::Vector3f, Eigen::Vector3f>;
             using ReconMetricsArray = std::array<float, static_cast<size_t>(ReconMetrics::NUM)>;
             using ScanMetricsArray = std::array<float, static_cast<size_t>(ScanMetrics::NUM)>;
@@ -79,8 +95,8 @@ namespace RingMeasure {
             { 
                 measure = measure_; 
                 camera_resolution = measure.ring.dA * M_PI / 360.0f;
-                resample = camera_resolution * 0.75f;
                 mid_height = measure.ring.h/2.0 + system.robot.table_h - system.robot.wedge_h;
+                measure_ready = true;
             }
 
             rm::SystemCfg getSystem() const { return system; }
@@ -88,6 +104,7 @@ namespace RingMeasure {
             { 
                 system = system_; 
                 smallest_value = system.sensor.z_oft/1.0e5  - system.sensor.mount_height;
+                system_ready = true;
             }
 
             std::array<float, NUM> angleEst() const { return angle_est; }
@@ -106,15 +123,10 @@ namespace RingMeasure {
 
             std::array<std::array<float, axis_num>, NUM> angleEval() const { return angle_eval; }
 
-            // enum class ReconMetrics{
-            //     // metrics for the lateral
-            //     CENTER_CYL_FIT,        // yes cyl_fit_eval[0][1]
-            //     AXIS_CYL_FIT,          // yes cyl_fit_eval[0][2]
-            //     // metrics for the bases
-            //     BASE_PARALLELISM,      // yes base_fit[0][1]
-            //     NUM
-            // };
-
+            /**
+             * @brief Computes global multi-scan reconstruction evaluation metrics.
+             * @return ReconMetricsArray Array containing calculated cross-scan metrics.
+             */
             ReconMetricsArray reconEval() const {
                 std::array<Eigen::Vector2f, NUM> center_points;
                 std::transform(cyl_fit.begin(), cyl_fit.end(), center_points.begin(), [](const CYLFitMetricTuple& t) {
@@ -143,7 +155,11 @@ namespace RingMeasure {
                 ret[static_cast<size_t>(ReconMetrics::BASE_PARALLELISM)] = std::acos(ret[static_cast<size_t>(ReconMetrics::BASE_PARALLELISM)]) * 180.0 / M_PI;
                 return ret; 
             }
-
+            
+            /**
+             * @brief Computes metrics for the currently active scan location.
+             * @return ScanMetricsArray Array containing calculated single-scan metrics.
+             */
             ScanMetricsArray scanEval() const {
                 ScanMetricsArray ret{0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
                 ret[static_cast<size_t>(ScanMetrics::ANGLE_MAJOR_LINE_FIT)] = angle_eval[loc][static_cast<size_t>(rm::AxisType::MAJOR)];
@@ -157,9 +173,20 @@ namespace RingMeasure {
 
             rm::PhaseType phaseType() const { return phase_type; }
             void setPhaseType(const rm::PhaseType &phaseType) { phase_type = phaseType;}
-
+            
+            /**
+             * @brief Executes the full calibration routine for a specific scan location.
+             * @param scan Target scan location.
+             * @param path Directory path for logging and exporting intermediate artifacts.
+             */
             void calibration(const rm::ScanLocation& scan, const fs::path& path);
 
+            /**
+             * @brief Executes the verification routine for a specific scan location.
+             * @param scan Target scan location.
+             * @param path Directory path for output artifacts.
+             * @param profile Flag indicating whether profiling output should be generated.
+             */
             void verification(const rm::ScanLocation& scan, const fs::path& path,
                               bool profile=true);
 
@@ -167,8 +194,17 @@ namespace RingMeasure {
 
             std::array<BaseFitMetricTuple, NUM> baseFit() const { return base_fit; }
 
+            rm::ParamTune getParam() const { return param; }
+            void setParam(const rm::ParamTune &param_) { param = param_; }
+
         protected:
-        
+            /**
+             * @brief Checks if both measure and system configurations are ready for processing.
+             */
+            bool isReady() const {
+                return measure_ready && system_ready;
+            }
+
             void setScanLoc(const ScanLocation &scanLoc)
             {
                  scan_loc = scanLoc;
@@ -178,10 +214,40 @@ namespace RingMeasure {
             rm::ProcessType processType() const { return process_type; }
             void setProcessType(const rm::ProcessType &processType) { process_type = processType; }
 
+            /**
+             * @brief Reconstructs point cloud data from raw files.
+             * @param path Path to the raw data files.
+             */
             void reconstruct(std::string path);
+
+            /**
+             * @brief Applies denoising filters and segmentation.
+             * @param path_den Path for denoising outputs.
+             * @param path_seg Path for segmentation outputs.
+             * @param free_raw Flag to release raw memory after processing.
+             */
             void denoise(fs::path path_den, fs::path path_seg, bool free_raw=true);
+
+            /**
+             * @brief Performs rotational calibration routine.
+             * @param path Target directory path.
+             */
             void caliRot(fs::path path);
+
+            /**
+             * @brief Performs translational calibration routine.
+             * @param path Target directory path.
+             */
             void caliTrans(fs::path path);
+
+            /**
+             * @brief Extracts Euclidean clusters from a point cloud.
+             * @param input Pointer to input point cloud.
+             * @param min_cluster_size Minimum point count requirement for clusters.
+             * @param path Export directory path.
+             * @param prefix Filename prefix for outputs.
+             * @return pcl::PointCloud<pcl::PointXYZ>::Ptr Extracted cluster cloud.
+             */
             pcl::PointCloud<pcl::PointXYZ>::Ptr
             ecExtract(const pcl::PointCloud<pcl::PointXYZ>::Ptr& input,
                       int min_cluster_size,
@@ -189,6 +255,15 @@ namespace RingMeasure {
                       const std::string prefix
             );
 
+            /**
+             * @brief Performs normal-based segmentation to isolate lateral and base surfaces.
+             * @param input Pointer to source point cloud.
+             * @param path Export directory path.
+             * @param prefix Filename prefix for exports.
+             * @param lateral Reference to output lateral point cloud.
+             * @param base Reference to output base point cloud.
+             * @return pcl::PointCloud<pcl::PointNormal>::Ptr Processed normal point cloud.
+             */
             pcl::PointCloud<pcl::PointNormal>::Ptr
             normalSegmentation(
                 const pcl::PointCloud<pcl::PointXYZ>::Ptr& input,
@@ -199,17 +274,18 @@ namespace RingMeasure {
             );
     
         protected:
-
-            std::shared_ptr<spdlog::logger> logger;
-            ScanLocation scan_loc;
-            size_t loc;
+            /// Active logger instance, default console
+            std::shared_ptr<spdlog::logger> logger=spdlog::default_logger(); 
+            ScanLocation scan_loc;                  ///< Current scan location
+            size_t loc;                             ///< Current scan index
+            
+            rm::ParamTune param;                        ///< Calibration parameters
     
-            rm::MeasureCfg measure;
-            rm::SystemCfg system;
-            int camera_resolution;
-            float resample;
-            float mid_height;
-            float smallest_value;
+            rm::MeasureCfg measure;                 ///< Measure configuration
+            rm::SystemCfg system;                   ///< System configuration
+            int camera_resolution;                  ///< Camera resolution
+            float mid_height;                       ///< Middle height of the scan
+            float smallest_value;                   ///< Smallest value in the point cloud
 
             // result from cylinder fitting
             std::array<float, NUM> angle_est;
@@ -227,12 +303,10 @@ namespace RingMeasure {
             std::array<pcl::PointCloud<pcl::PointNormal>::Ptr, NUM> rec_normals{nullptr};
         
         private:
-            // Only allow glatt ring as the calibration ring type.
-            rm::RingType ring_type=rm::RingType::GR;
-            rm::PhaseType phase_type;
-            rm::ProcessType process_type;
-
-
-
+            rm::RingType ring_type=rm::RingType::GR; ///< Calibration ring type (fixed to smooth ring)
+            rm::PhaseType phase_type;                ///< Active execution phase type
+            rm::ProcessType process_type;            ///< Active process type
+            bool measure_ready = false;              ///< Flag indicating measure configuration readiness
+            bool system_ready = false;               ///< Flag indicating system configuration readiness
     };
 }

@@ -8,9 +8,11 @@
 #include <spdlog/sinks/basic_file_sink.h>
 // To make SPDLOG_LOGGER_TRACE work with fs::path
 #include <spdlog/fmt/std.h>
-#include "visualization.hpp"
 
 #include <argparse/argparse.hpp>
+ 
+#include "param.hpp"
+#include "visualization.hpp"
 
 #if defined(RING_MEASURE_CALI_ONLY) && defined(RING_MEASURE_VERIFY_ONLY)
     #error "Cannot define both RING_MEASURE_CALI_ONLY and RING_MEASURE_VERIFY_ONLY!"
@@ -31,24 +33,38 @@ main (int argc, char* argv[])
            .help("Folder to calibrate or a single measure configuration file.");
 
     program.add_argument("-p", "--parameter")
-           .help("Path to the parameter file")
-           .default_value(std::string("parameter.ini"));
+           .help("Path to the parameter file."
+                 "If not specified, the default parameters will be used, the out_path will be set to 'result'."
+                 "If specified, the parameters will be loaded from the file, and the out_path will be set to folder of the same name."
+                 );
+
+    program.add_argument("-o", "--output")
+           .help("Path to the output directory."
+                 "If not specified, the output will be set to 'result' in the root folder"
+                 "or in accordance with the value of 'parameter'."
+                 "If specified, the output will be overwritten."
+                 );
 
     program.add_argument("-r", "--ring-cfg")
-           .help("Specific ring to calibrate, if not specified,\n\
-all rings in the folder will be processed.");
+       .help("Specific ring to calibrate, otherwise, "
+             "all rings in the folder will be processed."
+             "If -r specified, the parameters will be dumped to the log file."
+             "Otherwise, the parameters will be dumped to the parameters.ini file in the root folder.");
+
+    program.add_argument("-s", "--suffix")
+           .help("If -r specified, add the suffix to the log_file name."
+                 "Otherwise, no effect"
+                 "Usually, used to distinguish different runs of different parameters on the same ring.")
+           .default_value(std::string(""));
 
     try {
         program.parse_args(argc, argv);
     } catch (const std::exception& err) {
         SPDLOG_LOGGER_ERROR(logger, "Error parsing arguments: {}", err.what());
-        auto aux = std::ostringstream{};
-        aux << program;
-        SPDLOG_LOGGER_ERROR(logger, "{}", aux.str());
+        SPDLOG_LOGGER_ERROR(logger, "{}", program.usage());
         return 1;
     }
 
-    fs::path param_file = program.get<std::string>("--parameter");
     fs::path root = program.get<std::string>("cali");
 
     if (!fs::exists(root)) {
@@ -56,25 +72,32 @@ all rings in the folder will be processed.");
         return 1;
     }
 
-    fs::path parameters = program.get<std::string>("--parameter");
-    fs::path out_root;
+    rm::RingCalibration cali;
+    auto parameters = program.present<std::string>("--parameter");
+    rm::ParamTune param;
+    fs::path out_root = root / "result";
     if(program.is_used("--parameter")){
-        out_root = root / parameters.stem();
-    } else {
+        auto aux = fs::path(parameters.value());
+        out_root = root / aux.stem();
+        SPDLOG_LOGGER_INFO(logger, "Output root directory set to {} based on parameter file.", out_root);
+        rm::loadParam(aux, param);
+        SPDLOG_LOGGER_INFO(logger, "Loaded calibration parameters from {}.", aux);
+        cali.setParam(param);
+    }
+    
+    else {
         out_root = root / "result";
+        SPDLOG_LOGGER_INFO(logger, "Using default parameters.");
+        SPDLOG_LOGGER_INFO(logger, "Output root directory set to {}.", out_root);
     }
 
     fs::path config_path = root / "config";
     fs::path log_path = out_root / "logs";
-    if(!fs::exists(log_path))
-    {
-      CREATE_DIR(logger, log_path);
-    }
+    CREATE_DIR(logger, log_path);
+    SPDLOG_LOGGER_INFO(logger, "Output log directory set to {}.", log_path);
     fs::path cali_path = out_root / "calibrations";
-    if(!fs::exists(cali_path))
-    {
-      CREATE_DIR(logger, cali_path);
-    }
+    CREATE_DIR(logger, cali_path);
+    SPDLOG_LOGGER_INFO(logger, "Output calibration directory set to {}.", cali_path);
 
     fs::path system_cfg_file = root / "system.ini";
     rm::SystemCfg sys_;
@@ -82,7 +105,7 @@ all rings in the folder will be processed.");
     SPDLOG_LOGGER_INFO(logger, "Loaded configuration from {}.", system_cfg_file);
 
     auto single_cfg_file = program.present<std::string>("--ring-cfg");
-    rm::RingCalibration cali;
+
     for (const auto& measure_cfg_file : fs::directory_iterator(config_path)) {
 
         // If the argument is a file, only process that specific file
@@ -93,7 +116,11 @@ all rings in the folder will be processed.");
         auto start_time = std::chrono::high_resolution_clock::now();
 
         fs::path ring = measure_cfg_file.path().filename();
-        logger=spdlog::basic_logger_mt(ring, log_path / ring.replace_extension(".log"), true);
+        if(single_cfg_file){
+            ring = ring.stem().string() + program.get<std::string>("--suffix") + ring.extension().string();
+        }
+        auto log_file = log_path / ring.replace_extension(".log");
+        logger=spdlog::basic_logger_mt(ring, log_file, true);
         logger->set_level(spdlog::level::trace);
         logger->set_pattern("[%Y-%m-%d %H:%M:%S] [%l] [%s:%#] %v");
         // wrapper the PCl logger with time and level information
@@ -125,7 +152,7 @@ all rings in the folder will be processed.");
         cali.setSystem(sys_);
     
         // Specify the path to the file system.
-        fs::path path = out_root / (measure.ring.type + "_" + measure_cfg_file.path().stem().string());
+        fs::path path = out_root / (measure.ring.type + "_" + ring.stem().string());
         CREATE_DIR(logger, path);
 
         #ifndef RING_MEASURE_VERIFY_ONLY
@@ -165,12 +192,12 @@ all rings in the folder will be processed.");
         // Dump the new configuratrion to a ini file.
         // Do not dump the configuration in verifying only mode.
         #ifndef RING_MEASURE_VERIFY_ONLY
-            fs::path new_ini = cali_path / ("system_" + measure_cfg_file.path().filename().string());
+            fs::path new_ini = cali_path / ("system_" + ring.string());
             SPDLOG_LOGGER_INFO(logger, "Dumping the new configuration to {}", new_ini);
             auto sys_cali = cali.getSystem();
             rm::dumpConfig(new_ini, sys_cali);
             auto calibrated = cali.getSystem().robot.scans;
-            fs::path binary_ini = cali_path / measure_cfg_file.path().stem();
+            fs::path binary_ini = cali_path / ring.stem();
             // Open file in output + binary mode
             SPDLOG_LOGGER_INFO(logger, "Dumping the new binary configuration to {}", binary_ini);
             std::ofstream out_file(binary_ini, std::ios::binary);
@@ -181,7 +208,6 @@ all rings in the folder will be processed.");
             );
             out_file.close();
         #endif
-        logger->flush();
 
         // #ifndef RING_MEASURE_CALI_ONLY
         // // write the reconstructed point clouds to PLY files for visualization
@@ -295,6 +321,11 @@ all rings in the folder will be processed.");
         auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
         SPDLOG_LOGGER_WARN(logger, "Total execution time: {} ms", duration.count());
         SPDLOG_LOGGER_INFO(logger, "Finished processing the scan from {}.\n\n\n", measure_cfg_file.path().stem());
+
+        logger->flush();
+        if(single_cfg_file) {
+            dumpParam(log_file, cali.getParam(), std::ios_base::app);
+        }
     }
 
     // TODO: 
@@ -305,7 +336,9 @@ all rings in the folder will be processed.");
         SPDLOG_LOGGER_INFO(spdlog::default_logger(), "Finished processing the measure configuration file: {}", single_cfg_file.value());
     }
     else
-    {
+    {   
+        SPDLOG_LOGGER_INFO(spdlog::default_logger(), "Dumping the parameter file for the measure configuration folder: {}", root);
+        dumpParam(root / "parameters.ini", cali.getParam(), std::ios_base::app);
         SPDLOG_LOGGER_INFO(spdlog::default_logger(), "Finished processing the measure configuration folder: {}", root);
     }
     // flush all the logs and terminate the threads safely.

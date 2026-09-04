@@ -40,9 +40,6 @@ add_compile_definitions(SPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_INFO)
 # Add RING_MEASURE_VERIFY_ONLY to enbale the verify mode.
 # add_compile_definitions(RING_MEASURE_CALI_ONLY)
 # add_compile_definitions(RING_MEASURE_VERIFY_ONLY)
-add_compile_definitions(RING_MEASURE_VERI_MAD_DISABLED)
-# Using manual turned parameters fro region growing
-add_compile_definitions(RING_MEASURE_RG_MANUAL)
 
 # Put the output binaries in the root directory
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}")
