@@ -33,28 +33,28 @@ main (int argc, char* argv[])
            .help("Folder to calibrate or a single measure configuration file.");
 
     program.add_argument("-p", "--parameter")
-           .help("Path to the parameter file."
-                 "If not specified, the default parameters will be used, the out_path will be set to 'result'."
-                 "If specified, the parameters will be loaded from the file, and the out_path will be set to folder of the same name."
+           .help("Path to the parameter file.\n"
+                 "If not specified, the default parameters will be used, the out_path will be set to 'result'.\n"
+                 "If specified, the parameters will be loaded from the file, \nand the out_path will be set to folder of the same name."
                  );
 
     program.add_argument("-o", "--output")
-           .help("Path to the output directory."
-                 "If not specified, the output will be set to 'result' in the root folder"
-                 "or in accordance with the value of 'parameter'."
+           .help("Path to the output directory.\n"
+                 "If not specified, the output will be set to 'result' in the root folder.\n"
+                 "or in accordance with the value of 'parameter'.\n"
                  "If specified, the output will be overwritten."
                  );
 
     program.add_argument("-r", "--ring-cfg")
-       .help("Specific ring to calibrate, otherwise, "
-             "all rings in the folder will be processed."
-             "If -r specified, the parameters will be dumped to the log file."
-             "Otherwise, the parameters will be dumped to the parameters.ini file in the root folder.");
+       .help("Specific ring to calibrate, otherwise, \n"
+             "all rings in the folder will be processed.\n"
+             "If -r specified, the parameters will be dumped to the log file.\n"
+             "Otherwise, the parameters will be dumped to the parameters.ini file in the root folder.\n");
 
     program.add_argument("-s", "--suffix")
-           .help("If -r specified, add the suffix to the log_file name."
-                 "Otherwise, no effect"
-                 "Usually, used to distinguish different runs of different parameters on the same ring.")
+           .help("If -r specified, add the suffix to the log_file name.\n"
+                 "Otherwise, no effect\n"
+                 "Usually, used to distinguish different runs of different parameters on the same ring.\n")
            .default_value(std::string(""));
 
     try {
@@ -117,10 +117,10 @@ main (int argc, char* argv[])
 
         fs::path ring = measure_cfg_file.path().filename();
         if(single_cfg_file){
-            ring = ring.stem().string() + program.get<std::string>("--suffix") + ring.extension().string();
+            ring = ring.stem().string() + "_" + program.get<std::string>("--suffix") + ring.extension().string();
         }
         auto log_file = log_path / ring.replace_extension(".log");
-        logger=spdlog::basic_logger_mt(ring, log_file, true);
+        logger=spdlog::basic_logger_mt(ring.string(), log_file.string(), true);
         logger->set_level(spdlog::level::trace);
         logger->set_pattern("[%Y-%m-%d %H:%M:%S] [%l] [%s:%#] %v");
         // wrapper the PCl logger with time and level information
@@ -192,7 +192,7 @@ main (int argc, char* argv[])
         // Dump the new configuratrion to a ini file.
         // Do not dump the configuration in verifying only mode.
         #ifndef RING_MEASURE_VERIFY_ONLY
-            fs::path new_ini = cali_path / ("system_" + ring.string());
+            fs::path new_ini = (cali_path / ("system_" + ring.string())).replace_extension(".ini");
             SPDLOG_LOGGER_INFO(logger, "Dumping the new configuration to {}", new_ini);
             auto sys_cali = cali.getSystem();
             rm::dumpConfig(new_ini, sys_cali);
@@ -338,7 +338,7 @@ main (int argc, char* argv[])
     else
     {   
         SPDLOG_LOGGER_INFO(spdlog::default_logger(), "Dumping the parameter file for the measure configuration folder: {}", root);
-        dumpParam(root / "parameters.ini", cali.getParam(), std::ios_base::app);
+        dumpParam(root / "parameters.ini", cali.getParam(), std::ios_base::out | std::ios::trunc);
         SPDLOG_LOGGER_INFO(spdlog::default_logger(), "Finished processing the measure configuration folder: {}", root);
     }
     // flush all the logs and terminate the threads safely.

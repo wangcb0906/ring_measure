@@ -15,11 +15,11 @@
 
 #include "cali.hpp"
 
-void RingMeasure::RingCalibration::reconstruct(std::string path)
+void RingMeasure::RingCalibration::reconstruct(const fs::path& path_)
 {
     auto IDX = static_cast<size_t>(scan_loc);
     int is_under = (scan_loc == RingMeasure::ScanLocation::Under) ? -1 : 1;
-    const std::string &scan = measure.img.path / measure.img.imgs[IDX];
+    const std::string &scan = (measure.img.path / measure.img.imgs[IDX]).string();
     
     // read the scan image and convert the img to float
     cv::Mat img_ = cv::imread(scan, cv::IMREAD_GRAYSCALE | cv::IMREAD_ANYDEPTH);
@@ -109,6 +109,7 @@ void RingMeasure::RingCalibration::reconstruct(std::string path)
         // /py line.plot_line($idx, $show)
         const int show = 0; // Set show = 1 to plot the interactive one
         // Convert the points to pcl point cloud
+        const std::string path = path_.string();
         if( (scan_loc == RingMeasure::ScanLocation::Under)
             && phase_type == RingMeasure::PhaseType::VERI){
             int a = 0; // placeholder

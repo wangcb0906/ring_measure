@@ -69,9 +69,8 @@ main (int argc, char* argv[])
     auto system_cfg_file = root / "system.ini";
 
     SPDLOG_LOGGER_WARN(logger, "Starting reconstruction...");
-    fs::path log_path(cali_path / "measure_cali");
-    CREATE_DIR(logger, log_path);
-
+    fs::path measure_root(cali_path / ("measure_cali_" + program.get<std::string>("--calibration")));
+    CREATE_DIR(logger, measure_root);
 
     constexpr std::array<rm::ScanLocation, static_cast<size_t>(rm::ScanLocation::NUM)> scan_locs = {
         rm::ScanLocation::In,
@@ -79,13 +78,14 @@ main (int argc, char* argv[])
         rm::ScanLocation::Under
     };
 
+    int size = calis.size();
     // Create a 3D grid where EVERY cell is a dynamic std::vector
     boost::multi_array<rm::RingCalibration::ScanMetricsArray, 3> eval_scan(
         boost::extents[static_cast<size_t>(rm::ScanLocation::NUM)]
-        [calis.size()][calis.size()]
+        [size][size]
     );
     boost::multi_array<rm::RingCalibration::ReconMetricsArray, 2> eval_recon(
-        boost::extents[calis.size()][calis.size()]
+        boost::extents[size][calis.size()]
     );
 
     rm::SystemCfg sys;
@@ -97,7 +97,8 @@ main (int argc, char* argv[])
         rm::RingCalibration cali;
         cali.setPhaseType(rm::PhaseType::VERI);
         const auto& cali_cfg_file = calis[cali_idx];
-        logger=spdlog::basic_logger_mt("MeasureCali", log_path / ("[" + std::to_string(cali_idx) + "]=" + cali_cfg_file + ".log"), true);
+        logger=spdlog::basic_logger_mt("MeasureCali_" + std::to_string(cali_idx), 
+            (measure_root / ("[" + std::to_string(cali_idx) + "]=" + cali_cfg_file + ".log")).string(), true);
         logger->set_level(spdlog::level::trace);
         logger->set_pattern("[%Y-%m-%d %H:%M:%S] [%l] [%s:%#] %v");
         // wrapper the PCl logger with time and level information
@@ -118,9 +119,9 @@ main (int argc, char* argv[])
         in_file.close();
         cali.setSystem(sys);
 
-        fs::path root_out_path = root / ("measure_cali_" + cali_cfg_file);
+        fs::path root_out_path = measure_root / cali_cfg_file;
         CREATE_DIR(logger, root_out_path);
-        fs::path path = root_out_path / cali_cfg_file;
+
         auto start_time = std::chrono::high_resolution_clock::now();
         // Start to evaluate the calibration results
 
@@ -137,7 +138,6 @@ main (int argc, char* argv[])
             {
                 cali.verification(scan, ring_path, true);
                 auto loc = static_cast<size_t>(scan);
-                // /py
                 eval_scan[loc][cali_idx][eval_idx] = cali.scanEval();
                 if(ring.find("_3_1") != std::string::npos)
                 {
@@ -146,18 +146,20 @@ main (int argc, char* argv[])
             }
 
             eval_recon[cali_idx][eval_idx] = cali.reconEval();
-            std::string path_str = log_path.string();
+            std::string path_str = measure_root.string();
             float da = measure.ring.dA;
             float di = measure.ring.dI;
             float h = measure.ring.h;
             float table_h = sys.robot.table_h;
-            // /py eval.plot_eval($da, $di, $h, $table_h)
+            // /py eval.plot_eval($da, $di, $h, $table_h) if ($eval_idx+1==$size and $cali_idx+1==$size) else False
             int a = 0; // placeholder
         }
         auto end_time = std::chrono::high_resolution_clock::now();
         auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
         SPDLOG_LOGGER_WARN(logger, "Total execution time: {} ms", duration.count());
         SPDLOG_LOGGER_INFO(logger, "Finished processing the evaluation {}.\n\n\n", cali_cfg_file);
+        SPDLOG_LOGGER_WARN(spdlog::default_logger(), "Total execution time: {} ms", duration.count());
+        SPDLOG_LOGGER_INFO(spdlog::default_logger(), "Finished processing the evaluation {}.", cali_cfg_file);
     }
     
     //     // write the reconstructed point clouds to PLY files for visualization

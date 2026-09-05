@@ -20,6 +20,16 @@
 
 namespace {
     namespace spdl=spdlog::level;
+    struct RGBColor {
+        uint8_t r, g, b;
+    };
+    // Classic Distinct Palette (Red, Green, Blue, Yellow)
+    std::vector<RGBColor> cluster_colors = {
+        {255, 0,   0},   // Cluster 0: Pure Red
+        {0,   255, 0},   // Cluster 1: Pure Green
+        {0,   0,   255}, // Cluster 2: Pure Blue
+        {255, 255, 0}    // Cluster 3: Yellow
+    };
     pcl::PointCloud<pcl::PointNormal>::Ptr
     removeCurvatureNan(const pcl::PointCloud<pcl::PointNormal>::Ptr& cloud,
                        const std::shared_ptr<spdlog::logger> &logger)
@@ -41,6 +51,7 @@ namespace {
     
     // The curvature in PCL is stored as float.
     float getCurvThld(const pcl::PointCloud<pcl::PointNormal>::Ptr& cloud,
+                      const std::filesystem::path ply_path,
                       const std::shared_ptr<spdlog::logger> &logger)
     {
         pcl::Kmeans kmeans(cloud->size(), 1u);
@@ -52,6 +63,35 @@ namespace {
         }
         kmeans.kMeans();
         auto centroids = kmeans.get_centroids();
+        std::vector<size_t> cluster_sizes(centroids.size(), 0);
+        pcl::PointCloud<pcl::PointXYZRGB>::Ptr colored_cloud(new pcl::PointCloud<pcl::PointXYZRGB>);
+        SPDLOG_EXEC(logger, spdl::trace, colored_cloud->resize(cloud->size()););
+        for (size_t i = 0; i < cloud->size(); ++i) {
+            const auto& pt = cloud->points[i];
+            float curv = pt.curvature;
+            int best_cluster = 0;
+            float min_dist = std::numeric_limits<float>::max();
+            for (size_t c = 0; c < centroids.size(); ++c) {
+                float dist = std::abs(curv - centroids[c][0]);
+                if (dist < min_dist) {
+                    min_dist = dist;
+                    best_cluster = static_cast<int>(c);
+                }
+            }
+            SPDLOG_EXEC(logger, spdl::trace,
+                auto& dest = colored_cloud->points[i];
+                dest.x = pt.x;
+                dest.y = pt.y;
+                dest.z = pt.z;
+                dest.r = cluster_colors[best_cluster].r;
+                dest.g = cluster_colors[best_cluster].g;
+                dest.b = cluster_colors[best_cluster].b;
+            );
+            cluster_sizes[best_cluster]++;
+        }
+        SPDLOG_LOGGER_DEBUG(logger, "Cluster sizes: {}", fmt::join(cluster_sizes, ", "));
+        SPDLOG_LOGGER_TRACE(logger, "Saving the visualized clustering of normal to {}.", ply_path);
+        SPDLOG_EXEC(logger, spdl::trace, pcl::io::savePLYFileASCII(ply_path, *colored_cloud));
         float curv_thld = (centroids[0][0] + centroids[1][0]) / 2.0f;
         SPDLOG_LOGGER_DEBUG(logger, "Curvature threshold determined by k-means: {}", curv_thld);
         return curv_thld;
@@ -81,17 +121,6 @@ namespace {
         SPDLOG_LOGGER_DEBUG(logger, "K-means centroids for normal_y: {}", fmt::join(centroids, ", "));
         
         std::vector<size_t> cluster_sizes(centroids.size(), 0);
-        struct RGBColor {
-            uint8_t r, g, b;
-        };
-        // Classic Distinct Palette (Red, Green, Blue, Yellow)
-        std::vector<RGBColor> cluster_colors = {
-            {255, 0,   0},   // Cluster 0: Pure Red
-            {0,   255, 0},   // Cluster 1: Pure Green
-            {0,   0,   255}, // Cluster 2: Pure Blue
-            {255, 255, 0}    // Cluster 3: Yellow
-        };
-
         pcl::PointCloud<pcl::PointXYZRGB>::Ptr colored_cloud(new pcl::PointCloud<pcl::PointXYZRGB>);
         SPDLOG_EXEC(logger, spdl::trace, colored_cloud->resize(cloud->size()););
         for (size_t i = 0; i < cloud->size(); ++i) {
@@ -125,6 +154,7 @@ namespace {
             }),
             centroids.end()
         );
+        SPDLOG_LOGGER_TRACE(logger, "Before sorting: centroids = [{}]", fmt::join(centroids, ", "));
         // Sort the array in descending order becasue acos is a decreasing function.
         std::sort(centroids.begin(), centroids.end(), [](const float& a, const float& b) {
             return a > b;
@@ -133,7 +163,7 @@ namespace {
         std::for_each(centroids.begin(), centroids.end(), [](float& val) {
             val = std::acos(val);
         });
-        SPDLOG_LOGGER_TRACE(logger, "Convert to angles: centroids = [{}]", fmt::join(centroids, ", "));
+        SPDLOG_LOGGER_TRACE(logger, "Convert to radians: centroids = [{}]", fmt::join(centroids, ", "));
         std::vector<float> diffs(centroids.size());
         std::adjacent_difference(centroids.begin(), centroids.end(), diffs.begin());
         // skip the first element of diffs since it's not a valid difference
@@ -359,12 +389,13 @@ namespace RingMeasure {
             reg.setInputNormals (normals);
 
             auto nan_curv_removed =  removeCurvatureNan(input_with_normals, logger);
+            float curv_thld = 0.0;
             if(params.curvature_type == OperationMode::MANUAL)
             {
                 reg.setCurvatureThreshold (params.curvature_thld);
             } else if(params.curvature_type == OperationMode::AUTO)
             {
-                float curv_thld = getCurvThld(nan_curv_removed, logger);
+                curv_thld = getCurvThld(nan_curv_removed, path / (prefix + "curv_clustering_visualization.ply"), logger);
                 reg.setCurvatureThreshold (curv_thld);
                 SPDLOG_LOGGER_INFO(logger, "Curvature threshold is automatically determined.");
             } else 
@@ -388,8 +419,10 @@ namespace RingMeasure {
                 exit(EXIT_FAILURE);
             }
 
+            SPDLOG_EXEC(logger, spdl::debug, visualizeCurvature(nan_curv_removed, curv_thld, 
+                path / (prefix + "curvature_binary.ply"), logger));
             SPDLOG_EXEC(logger, spdl::debug, visualizeCurvature(nan_curv_removed, 0.0, 
-                path / (prefix + "curvature.ply"), logger));
+                path / (prefix + "curvature_max_min.ply"), logger));
             SPDLOG_EXEC(logger, spdl::debug, visualizeNormal(nan_curv_removed,
                 path / (prefix + "normal_normalized_visualization.ply"), logger));
             

@@ -4,6 +4,9 @@
 #include <spdlog/spdlog.h>
 #include <functional>
 
+#include <filesystem>
+#include <pcl/io/ply_io.h>
+
 /**
  * @def SPDLOG_EXEC
  * @brief Conditionally executes a function call based on the active spdlog level.
@@ -62,3 +65,17 @@ inline auto createPclLogHandler(std::shared_ptr<spdlog::logger> logger) {
         }
     };
 }
+
+#ifdef _WIN32
+    namespace pcl::io
+    {
+    
+        template <typename PointT>
+        inline int savePLYFileASCII(
+            const std::filesystem::path& path,
+            const pcl::PointCloud<PointT>& cloud)
+        {
+            return savePLYFileASCII(path.string(), cloud);
+        }
+    }
+#endif

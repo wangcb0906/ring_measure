@@ -37,9 +37,9 @@ namespace RingMeasure {
         throw std::invalid_argument("Invalid string for Modes: " + std::string(str));
     }
 
-    void loadParam(const std::string& param_cfg, struct ParamTune& param)
+    void loadParam(const std::filesystem::path& param_cfg, struct ParamTune& param)
     {
-        ini::IniFile param_ini(param_cfg);
+        ini::IniFile param_ini(param_cfg.string());
 
         // Euclidean section
         auto& euc = param_ini["Euclidean"];
@@ -87,7 +87,7 @@ namespace RingMeasure {
         param.misc.resample_ratio                = misc["resample_ratio"].as<float>();
     }
 
-    void dumpParam(const std::string& param_cfg, const struct ParamTune& param, std::ios_base::openmode mode)
+    void dumpParam(const std::filesystem::path& param_cfg, const struct ParamTune& param, std::ios_base::openmode mode)
     {
         ini::IniFile param_ini;
 
@@ -137,12 +137,12 @@ namespace RingMeasure {
         misc["resample_ratio"]                = param.misc.resample_ratio;
 
         // Output logic
-        if (param_cfg == "stdout") {
+        if (param_cfg.string() == "stdout") {
             param_ini.encode(std::cout);
             return;
         }
 
-        std::ofstream outFile(param_cfg, mode);
+        std::ofstream outFile(param_cfg.string(), mode);
         param_ini.encode(outFile);
     }
 }

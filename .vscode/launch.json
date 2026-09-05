@@ -8,7 +8,7 @@
             "program": "${workspaceFolder}/ring_cali",
             "cwd": "${workspaceFolder}",
             "args": [
-                "test/20260622",
+                "cali/20260622",
                 "-r",
                 "4_ND_20260622_4_19.ini"
             ],
@@ -29,7 +29,7 @@
             "program": "${workspaceFolder}/ring_cali",
             "cwd": "${workspaceFolder}",
             "args": [
-                "test/20260622",
+                "cali/20260622",
                 "-r",
                 "4_ND_20260622_4_19.ini"
             ],
@@ -52,7 +52,7 @@
             "program": "${workspaceFolder}/ring_cali_eval",
             "cwd": "${workspaceFolder}",
             "args": [
-                "test/20260622"
+                "cali/20260622"
             ],
             "preLaunchTask": "build_cali_eval",
             "initCommands": [
@@ -72,7 +72,7 @@
             "program": "${workspaceFolder}/ring_cali_eval",
             "cwd": "${workspaceFolder}",
             "args": [
-                "test/20260622"
+                "cali/20260622"
             ],
             "preLaunchTask": "build_cali_eval",
             "MIMode": "gdb",

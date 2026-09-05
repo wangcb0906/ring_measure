@@ -260,7 +260,7 @@ namespace RingMeasure{
      * @param measure_cfg Path to the measurement configuration file.
      * @param measure Reference to the MeasureCfg structure to populate.
      */
-    void loadMeasureConfig(const std::string& measure_cfg, struct MeasureCfg& measure);
+    void loadMeasureConfig(const std::filesystem::path& measure_cfg, struct MeasureCfg& measure);
 
     /**
      * @brief Loads system configuration settings from an INI file.
@@ -268,7 +268,7 @@ namespace RingMeasure{
      * @param sys_cfg Path to the system configuration file.
      * @param sys Reference to the SystemCfg structure to populate.
      */
-    void loadSystemConfig(const std::string& sys_cfg, struct SystemCfg& sys);
+    void loadSystemConfig(const std::filesystem::path& sys_cfg, struct SystemCfg& sys);
 
     /**
      * @brief Dumps current system configuration settings to an INI file.
@@ -278,6 +278,6 @@ namespace RingMeasure{
      * @param sys_cfg Path to the target output configuration file.
      * @param sys Constant reference to the SystemCfg structure to write.
      */
-    void dumpConfig(const std::string& sys_cfg,
+    void dumpConfig(const std::filesystem::path& sys_cfg,
                     const struct SystemCfg& sys);
 }

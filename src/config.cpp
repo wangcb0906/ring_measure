@@ -8,10 +8,10 @@ namespace RingMeasure {
     const auto O = static_cast<size_t>(RingMeasure::ScanLocation::Out);
     const auto U = static_cast<size_t>(RingMeasure::ScanLocation::Under);
     
-    void dumpConfig(const std::string& sys_cfg,
-                                 const struct SystemCfg& sys)
+    void dumpConfig(const std::filesystem::path& sys_cfg,
+                    const struct SystemCfg& sys)
     {
-        ini::IniFile system_ini(sys_cfg);
+        ini::IniFile system_ini(sys_cfg.string());
       
         system_ini["Robot"]["angleI"] = sys.robot.scans[I].view_angle;
         system_ini["Robot"]["corrAngleI"] = sys.robot.scans[I].angle_corr;
@@ -42,7 +42,7 @@ namespace RingMeasure {
         system_ini["Sensor"]["x_pitch"] = sys.sensor.x_pitch;
         system_ini["Sensor"]["unit"] = sys.sensor.unit;
         system_ini["Sensor"]["mount"] = sys.sensor.mount_height;
-        if(sys_cfg == "stdout"){
+        if(sys_cfg.string() == "stdout"){
             system_ini.encode(std::cout);
             return;
         }
@@ -76,9 +76,9 @@ namespace RingMeasure {
         throw std::invalid_argument("Invalid string for PhaseType: " + std::string(str));
     }
 
-    void loadMeasureConfig(const std::string& measure_cfg, struct MeasureCfg& measure)
+    void loadMeasureConfig(const std::filesystem::path& measure_cfg, struct MeasureCfg& measure)
     {
-        ini::IniFile measure_ini(measure_cfg);
+        ini::IniFile measure_ini(measure_cfg.string());
         measure.img.path = std::filesystem::path(measure_ini["Scan"]["path"].as<std::string>());
         measure.img.imgs[I]      = measure_ini["Scan"]["I"].as<std::string>();
         measure.img.imgs[O]      = measure_ini["Scan"]["A"].as<std::string>();
@@ -105,10 +105,10 @@ namespace RingMeasure {
         measure.robot_pos[U].y = measure_ini["Robot"]["yU"].as<float>();
     }
 
-    void loadSystemConfig(const std::string& sys_cfg, struct SystemCfg& sys)
+    void loadSystemConfig(const std::filesystem::path& sys_cfg, struct SystemCfg& sys)
     {
     
-        ini::IniFile system_ini(sys_cfg);
+        ini::IniFile system_ini(sys_cfg.string());
         sys.robot.scans[I].view_angle   = system_ini["Robot"]["angleI"].as<float>();
         sys.robot.scans[I].angle_corr   = system_ini["Robot"]["corrAngleI"].as<float>();
         sys.robot.scans[I].pos_corr.x = system_ini["Robot"]["corrXI"].as<float>();

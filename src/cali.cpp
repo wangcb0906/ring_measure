@@ -1,5 +1,3 @@
-// #define WITHOUT_NUMPY
-// #include <matplotlibcpp.h>
 #include "cali.hpp"
 #include "log.hpp"
 #include "3rdparty/mad.hpp"
@@ -16,7 +14,7 @@
 #include <Eigen/Dense>
 
 #include <opencv2/core.hpp>
-#include <opencv2/imgproc.hpp>
+#include <opencv2/geometry/2d.hpp>
 
 namespace {
 

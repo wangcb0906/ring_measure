@@ -218,7 +218,7 @@ namespace RingMeasure {
              * @brief Reconstructs point cloud data from raw files.
              * @param path Path to the raw data files.
              */
-            void reconstruct(std::string path);
+            void reconstruct(const fs::path& path);
 
             /**
              * @brief Applies denoising filters and segmentation.

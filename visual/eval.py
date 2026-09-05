@@ -162,4 +162,4 @@ def plot_eval(da, di, h, table_h):
         fig.savefig(os.path.join(path_str, f"cali_cmp_{desc_str}.png"), dpi=600)
         plt.close()
 
-    return True
+    return False

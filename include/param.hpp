@@ -1,6 +1,7 @@
 #pragma once
 #include <string>
 #include <ios>
+#include <filesystem>
 
 namespace RingMeasure {
 
@@ -73,7 +74,7 @@ namespace RingMeasure {
         /// The normal threshold mode for region growing, can be MODE1, MODE2.
         /// Mode1 is more strength, leads to more segments.
         /// Mode2 is more relaxed, leads to less segments.
-        Modes normal_thld_mode = Modes::MODE2;
+        Modes normal_thld_mode = Modes::MODE1;
         /// The number of clusters for k-means to determine the normal threshold.
         int normal_thld_cluster_size = 4;
     };
@@ -150,7 +151,7 @@ namespace RingMeasure {
      * @param param Reference to the ParamTune struct where the loaded values will be stored.
      * @throws std::invalid_argument If an invalid enum string is encountered.
      */
-    void loadParam(const std::string& param_cfg, struct ParamTune& param);
+    void loadParam(const std::filesystem::path& param_cfg, struct ParamTune& param);
 
     /**
      * @brief Dumps tuning parameters to an INI configuration file.
@@ -161,6 +162,6 @@ namespace RingMeasure {
      * @param param Reference to the ParamTune struct containing the values to be dumped.
      * @param mode The open mode for the output file.
      */
-    void dumpParam(const std::string& param_cfg, const struct ParamTune& param,
+    void dumpParam(const std::filesystem::path& param_cfg, const struct ParamTune& param,
                    std::ios_base::openmode mode=std::ios_base::out);
 }
