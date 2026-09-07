@@ -52,48 +52,91 @@ namespace {
     // The curvature in PCL is stored as float.
     float getCurvThld(const pcl::PointCloud<pcl::PointNormal>::Ptr& cloud,
                       const std::filesystem::path ply_path,
+                      const RingMeasure::RegionGrowing& params,
                       const std::shared_ptr<spdlog::logger> &logger)
     {
-        pcl::Kmeans kmeans(cloud->size(), 1u);
-        kmeans.setClusterSize(2);
+
+        /// Mode1 is driven by kmeans clustering.
+        /// Mode2 is driven by the percentile setting, which depends on an extra parameter.
+        /// Mode3 takes the smaller value from MODE1 and MODE2, which is more robust to noise
+        /// at the risk of discarding some valid points.
+        auto mode = params.curv_thld_mode;
+
+        std::vector<std::vector<float>> points;
+        points.reserve(cloud->size());
         for (const auto& pt : *cloud) {
-            std::vector<float> vec;
-            vec.push_back(pt.curvature);
-            kmeans.addDataPoint(vec);
+            points.push_back({pt.curvature});
         }
-        kmeans.kMeans();
-        auto centroids = kmeans.get_centroids();
-        std::vector<size_t> cluster_sizes(centroids.size(), 0);
-        pcl::PointCloud<pcl::PointXYZRGB>::Ptr colored_cloud(new pcl::PointCloud<pcl::PointXYZRGB>);
-        SPDLOG_EXEC(logger, spdl::trace, colored_cloud->resize(cloud->size()););
-        for (size_t i = 0; i < cloud->size(); ++i) {
-            const auto& pt = cloud->points[i];
-            float curv = pt.curvature;
-            int best_cluster = 0;
-            float min_dist = std::numeric_limits<float>::max();
-            for (size_t c = 0; c < centroids.size(); ++c) {
-                float dist = std::abs(curv - centroids[c][0]);
-                if (dist < min_dist) {
-                    min_dist = dist;
-                    best_cluster = static_cast<int>(c);
+        
+        float kmeans_curv_thld;
+        if(mode != RingMeasure::Modes::MODE2){
+            pcl::Kmeans kmeans(cloud->size(), 1u);
+            kmeans.setClusterSize(2);
+            kmeans.setInputData(points);
+            kmeans.kMeans();
+            auto centroids = kmeans.get_centroids();
+            std::vector<size_t> cluster_sizes(centroids.size(), 0);
+            pcl::PointCloud<pcl::PointXYZRGB>::Ptr colored_cloud(new pcl::PointCloud<pcl::PointXYZRGB>);
+            SPDLOG_EXEC(logger, spdl::trace, colored_cloud->resize(cloud->size()););
+            for (size_t i = 0; i < cloud->size(); ++i) {
+                const auto& pt = cloud->points[i];
+                float curv = pt.curvature;
+                int best_cluster = 0;
+                float min_dist = std::numeric_limits<float>::max();
+                for (size_t c = 0; c < centroids.size(); ++c) {
+                    float dist = std::abs(curv - centroids[c][0]);
+                    if (dist < min_dist) {
+                        min_dist = dist;
+                        best_cluster = static_cast<int>(c);
+                    }
                 }
+                SPDLOG_EXEC(logger, spdl::trace,
+                    auto& dest = colored_cloud->points[i];
+                    dest.x = pt.x;
+                    dest.y = pt.y;
+                    dest.z = pt.z;
+                    dest.r = cluster_colors[best_cluster].r;
+                    dest.g = cluster_colors[best_cluster].g;
+                    dest.b = cluster_colors[best_cluster].b;
+                );
+                cluster_sizes[best_cluster]++;
             }
-            SPDLOG_EXEC(logger, spdl::trace,
-                auto& dest = colored_cloud->points[i];
-                dest.x = pt.x;
-                dest.y = pt.y;
-                dest.z = pt.z;
-                dest.r = cluster_colors[best_cluster].r;
-                dest.g = cluster_colors[best_cluster].g;
-                dest.b = cluster_colors[best_cluster].b;
-            );
-            cluster_sizes[best_cluster]++;
+            SPDLOG_LOGGER_TRACE(logger, "Cluster sizes: {}", fmt::join(cluster_sizes, ", "));
+            SPDLOG_LOGGER_TRACE(logger, "Saving the visualized clustering of normal to {}.", ply_path);
+            SPDLOG_EXEC(logger, spdl::trace, pcl::io::savePLYFileASCII(ply_path, *colored_cloud));
+            kmeans_curv_thld = (centroids[0][0] + centroids[1][0]) / 2.0f;
+            SPDLOG_LOGGER_TRACE(logger, "Curvature threshold determined by k-means: {}", kmeans_curv_thld);
         }
-        SPDLOG_LOGGER_DEBUG(logger, "Cluster sizes: {}", fmt::join(cluster_sizes, ", "));
-        SPDLOG_LOGGER_TRACE(logger, "Saving the visualized clustering of normal to {}.", ply_path);
-        SPDLOG_EXEC(logger, spdl::trace, pcl::io::savePLYFileASCII(ply_path, *colored_cloud));
-        float curv_thld = (centroids[0][0] + centroids[1][0]) / 2.0f;
-        SPDLOG_LOGGER_DEBUG(logger, "Curvature threshold determined by k-means: {}", curv_thld);
+
+        float percentile_curv_thld;
+        if(mode != RingMeasure::Modes::MODE1){
+            std::sort(points.begin(), points.end(), 
+                [](const std::vector<float>& a, const std::vector<float>& b) {
+                  return a[0] > b[0]; // Greater than for descending order
+                }
+            );
+            float ratio = params.curv_thld_ratio;
+            int percentile_index = 360 * ratio;
+            percentile_curv_thld = points[percentile_index][0];
+            SPDLOG_LOGGER_TRACE(logger, "Percentile index for curvature threshold: {} and value: {}", percentile_index, percentile_curv_thld);
+        }
+        float curv_thld = 0.0f;
+        switch(mode){
+            case RingMeasure::Modes::MODE1:
+                curv_thld = kmeans_curv_thld;
+                break;
+            case RingMeasure::Modes::MODE2:
+                curv_thld = percentile_curv_thld;
+                break;
+            case RingMeasure::Modes::MODE3:
+                curv_thld = std::min(kmeans_curv_thld, percentile_curv_thld);
+                break;
+            default:
+                SPDLOG_LOGGER_ERROR(logger, "Unknown curvature threshold mode: {}", static_cast<int>(mode));
+                throw std::runtime_error("Unknown curvature threshold mode");
+        }
+
+        SPDLOG_LOGGER_DEBUG(logger, "Final curvature threshold: {}", curv_thld);
         return curv_thld;
     }
 
@@ -170,19 +213,7 @@ namespace {
         // 2 points divided by 3
         // 3 points divded by 2
         // 4 points, keep the minimal
-        float thld;
-        if(params.normal_thld_mode == RingMeasure::Modes::MODE1)
-        {
-            thld = *std::min_element(diffs.begin() + 1, diffs.end()) / (5 - diffs.size());
-        } else if(params.normal_thld_mode == RingMeasure::Modes::MODE2)
-        {
-            thld = *std::min_element(diffs.begin() + 1, diffs.end()) / 2.0f;
-        } else
-        {   
-            SPDLOG_LOGGER_ERROR(logger, "Invalid normal threshold mode: {}", static_cast<int>(params.normal_thld_mode));
-            exit(EXIT_FAILURE);
-        }
-
+        float thld = *std::min_element(diffs.begin() + 1, diffs.end()) / (5 - diffs.size());
         SPDLOG_LOGGER_TRACE(logger, "Size of differences: {}", diffs.size());
         SPDLOG_LOGGER_TRACE(logger, "Differences between adjacent centroids: {}", fmt::join(diffs, ", "));
         SPDLOG_LOGGER_TRACE(logger, "Saving the visualized clustering of normal to {}.", ply_path);
@@ -194,7 +225,7 @@ namespace {
 }
 
 namespace RingMeasure {
-
+    namespace rm = ::RingMeasure;
     pcl::PointCloud<pcl::PointXYZ>::Ptr RingCalibration::ecExtract(
         const pcl::PointCloud<pcl::PointXYZ>::Ptr& input,
         int min_cluster_size,
@@ -395,7 +426,7 @@ namespace RingMeasure {
                 reg.setCurvatureThreshold (params.curvature_thld);
             } else if(params.curvature_type == OperationMode::AUTO)
             {
-                curv_thld = getCurvThld(nan_curv_removed, path / (prefix + "curv_clustering_visualization.ply"), logger);
+                curv_thld = getCurvThld(nan_curv_removed, path / (prefix + "curv_clustering_visualization.ply"), params, logger);
                 reg.setCurvatureThreshold (curv_thld);
                 SPDLOG_LOGGER_INFO(logger, "Curvature threshold is automatically determined.");
             } else 
@@ -409,7 +440,7 @@ namespace RingMeasure {
                 reg.setSmoothnessThreshold (params.smooth_thld);
             } else if(params.normal_type == OperationMode::AUTO)
             {
-                
+                SPDLOG_LOGGER_INFO(logger, "Normal threshold is automatically determined.");
                 float normal_thld = getNormalThld(nan_curv_removed, path / (prefix + "normal_clustering_visualization.ply"), params,logger);
                 reg.setSmoothnessThreshold (normal_thld);
                 SPDLOG_LOGGER_INFO(logger, "Smoothness threshold is automatically determined.");

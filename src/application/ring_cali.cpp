@@ -84,11 +84,15 @@ main (int argc, char* argv[])
         SPDLOG_LOGGER_INFO(logger, "Loaded calibration parameters from {}.", aux);
         cali.setParam(param);
     }
-    
     else {
         out_root = root / "result";
         SPDLOG_LOGGER_INFO(logger, "Using default parameters.");
         SPDLOG_LOGGER_INFO(logger, "Output root directory set to {}.", out_root);
+    }
+
+    if(program.is_used("--output")){
+        out_root = root / program.get<std::string>("--output");
+        SPDLOG_LOGGER_INFO(logger, "Output root directory set to {} based on --output argument.", out_root);
     }
 
     fs::path config_path = root / "config";
@@ -322,9 +326,6 @@ main (int argc, char* argv[])
         }
     }
 
-    // TODO: 
-    // dump the parameter file.
-
     if(single_cfg_file)
     {
         SPDLOG_LOGGER_INFO(spdlog::default_logger(), "Finished processing the measure configuration file: {}", single_cfg_file.value());
@@ -332,7 +333,7 @@ main (int argc, char* argv[])
     else
     {   
         SPDLOG_LOGGER_INFO(spdlog::default_logger(), "Dumping the parameter file for the measure configuration folder: {}", root);
-        dumpParam(root / "parameters.ini", cali.getParam(), std::ios_base::out | std::ios::trunc);
+        dumpParam(root / (out_root.filename().string() + ".ini"), cali.getParam(), std::ios_base::out | std::ios::trunc);
         SPDLOG_LOGGER_INFO(spdlog::default_logger(), "Finished processing the measure configuration folder: {}", root);
     }
     // flush all the logs and terminate the threads safely.

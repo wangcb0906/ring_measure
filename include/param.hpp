@@ -72,10 +72,14 @@ namespace RingMeasure {
         // The number of clusters is set based on the observation of the point cloud.
         int cluster_size = 3;
         /// The normal threshold mode for region growing, can be MODE1, MODE2.
-        /// Mode1 is more strength, leads to more segments.
-        /// Mode2 is more relaxed, leads to less segments.
-        Modes normal_thld_mode = Modes::MODE1;
-        /// The number of clusters for k-means to determine the normal threshold.
+        /// Mode1 is driven by kmeans clustering.
+        /// Mode2 is driven by the percentile setting, which depends on an extra parameter.
+        /// Mode3 takes the smaller value from MODE1 and MODE2, which is more robust to noise
+        /// at the risk of discarding some valid points.
+        Modes curv_thld_mode = Modes::MODE3;
+        /// This parameter depends on the number of layers you want to remove. See point cloud visualization for more details. It only takes effect when curvature_thld_mode is MODE2 or MODE3.
+        float curv_thld_ratio = 2.5;
+        /// The number of clusters fo k-means to determine the normal threshold.
         int normal_thld_cluster_size = 4;
     };
 

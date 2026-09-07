@@ -37,8 +37,16 @@ main (int argc, char* argv[])
     program.add_argument("cali")
            .help("Folder to calibrate or a single measure configuration file.");
 
-    program.add_argument("-c", "--calibration")
+    program.add_argument("-i", "--input")
            .help("Path to the calibration results");
+
+    program.add_argument("-c", "--calibration")
+           .help("Specific calibration to evaluate, otherwise, \n"
+                 "all calibrations in the folder will be processed.\n");
+
+    program.add_argument("-e", "--evaluation")
+           .help("Specific ring to evaluate, otherwise, \n"
+                 "all rings in the folder will be processed.\n");
 
     try {
         program.parse_args(argc, argv);
@@ -52,7 +60,7 @@ main (int argc, char* argv[])
 
     fs::path root = program.get<std::string>("cali");
 
-    auto cali_result = program.present<std::string>("--calibration");
+    auto cali_result = program.present<std::string>("--input");
     fs::path cali_path;
     fs::path paramters;
     if(cali_result){
@@ -61,8 +69,11 @@ main (int argc, char* argv[])
     }
     else{
         cali_path = root / "result";
-        paramters = root / "parameters.ini";
+        paramters = root / "result.ini";
     }
+
+    auto single_cali_file = program.present<std::string>("--calibration");
+    auto single_eval_file = program.present<std::string>("--evaluation");
 
     rm::ParamTune param;
     rm::loadParam(paramters, param);
@@ -106,9 +117,11 @@ main (int argc, char* argv[])
     SPDLOG_LOGGER_INFO(logger, "Loaded configuration from {}.", system_cfg_file);
     rm::MeasureCfg measure;
     for (size_t cali_idx = 0; cali_idx < calis.size(); ++cali_idx) {
-    
-        rm::RingCalibration cali;
         const auto& cali_cfg_file = calis[cali_idx];
+        if(single_cali_file && cali_cfg_file != single_cali_file.value()) {
+            continue;
+        }
+        rm::RingCalibration cali;
         logger=spdlog::basic_logger_mt("MeasureCali_" + std::to_string(cali_idx), 
             (measure_root / ("[" + std::to_string(cali_idx) + "]=" + cali_cfg_file + ".log")).string(), true);
         logger->set_level(spdlog::level::trace);
@@ -140,9 +153,12 @@ main (int argc, char* argv[])
         for (size_t eval_idx = 0; eval_idx < calis.size(); ++eval_idx)
         {
             const auto& ring = calis[eval_idx];
+            if(single_eval_file && ring != single_eval_file.value()) {
+                continue;
+            }
             fs::path ring_path = root_out_path / ring;
             CREATE_DIR(logger, ring_path);
-            SPDLOG_LOGGER_CRITICAL(logger, "Processing Ring {} with config {}", ring,  cali_cfg_file);
+            SPDLOG_LOGGER_INFO(logger, "Processing Ring {} with config {}", ring,  cali_cfg_file);
             rm::loadMeasureConfig(config_path / (ring + ".ini"), measure);
             cali.setMeasure(measure);
             for (const auto& scan : scan_locs)
@@ -164,9 +180,9 @@ main (int argc, char* argv[])
         
         auto end_time = std::chrono::high_resolution_clock::now();
         auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
-        SPDLOG_LOGGER_WARN(logger, "Total execution time: {} ms", duration.count());
+        SPDLOG_LOGGER_INFO(logger, "Total execution time: {} ms", duration.count());
         SPDLOG_LOGGER_INFO(logger, "Finished processing the evaluation {}.\n\n\n", cali_cfg_file);
-        SPDLOG_LOGGER_WARN(spdlog::default_logger(), "Total execution time: {} ms", duration.count());
+        SPDLOG_LOGGER_INFO(spdlog::default_logger(), "Total execution time: {} ms", duration.count());
         SPDLOG_LOGGER_INFO(spdlog::default_logger(), "Finished processing the evaluation {}.", cali_cfg_file);
     }
 
@@ -209,6 +225,7 @@ main (int argc, char* argv[])
     );
 
     SPDLOG_LOGGER_INFO(logger, "Finished processing the measure configuration folder: {}", config_path);
+    SPDLOG_LOGGER_INFO(spdlog::default_logger(), "Finished processing the measure configuration folder: {}", config_path);
 
     //     // write the reconstructed point clouds to PLY files for visualization
     //     *rec_out += *rec_in;

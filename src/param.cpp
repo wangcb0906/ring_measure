@@ -61,7 +61,8 @@ namespace RingMeasure {
         // Convert smooth_thld from degrees (INI) to radians (Struct)
         param.reg_growing.smooth_thld              = rg["smooth_thld"].as<float>() * (static_cast<float>(M_PI) / 180.0f);
         param.reg_growing.cluster_size             = rg["cluster_size"].as<int>();
-        param.reg_growing.normal_thld_mode         = stringToModes(rg["normal_thld_mode"].as<std::string>());
+        param.reg_growing.curv_thld_mode           = stringToModes(rg["curv_thld_mode"].as<std::string>());
+        param.reg_growing.curv_thld_ratio          = rg["curv_thld_ratio"].as<float>();
         param.reg_growing.normal_thld_cluster_size = rg["normal_thld_cluster_size"].as<int>();
 
         // PrimitiveFit section
@@ -111,8 +112,8 @@ namespace RingMeasure {
         // Convert smooth_thld from radians (Struct) back to degrees (INI)
         rg["smooth_thld"]              = param.reg_growing.smooth_thld * (180.0f / static_cast<float>(M_PI));
         rg["cluster_size"]             = param.reg_growing.cluster_size;
-        rg["normal_thld_mode"]         = modesToString(param.reg_growing.normal_thld_mode);
-        rg["normal_thld_cluster_size"] = param.reg_growing.normal_thld_cluster_size;
+        rg["curv_thld_mode"]           = modesToString(param.reg_growing.curv_thld_mode);
+        rg["curv_thld_ratio"]          = param.reg_growing.curv_thld_ratio;
 
         // PrimitiveFit section
         auto& pf = param_ini["PrimitiveFit"];
