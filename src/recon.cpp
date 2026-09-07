@@ -14,6 +14,7 @@
 #include <spdlog/spdlog.h>
 
 #include "cali.hpp"
+#include "3rdparty/read_tif.hpp"
 
 void RingMeasure::RingCalibration::reconstruct(const fs::path& path_)
 {
@@ -22,12 +23,14 @@ void RingMeasure::RingCalibration::reconstruct(const fs::path& path_)
     const std::string &scan = (measure.img.path / measure.img.imgs[IDX]).string();
     
     // read the scan image and convert the img to float
-    cv::Mat img_ = cv::imread(scan, cv::IMREAD_GRAYSCALE | cv::IMREAD_ANYDEPTH);
-    // check if the image is loaded successfully
-    if (img_.empty())
-    {
-        SPDLOG_LOGGER_ERROR(logger, "Error: Could not open or find the image {} ", scan);
-        return;
+    cv::Mat img_ = readTiffImage(scan);
+    
+    // Verification check
+    if (!img_.empty() && img_.cols == 3200 && img_.rows == 360 && img_.type() == CV_16UC1) {
+        ;
+    } else {
+        SPDLOG_LOGGER_ERROR(logger, "Error: The image {} is not valid. It should be 3200x360 and of type CV_16UC1.", scan);
+        exit(EXIT_FAILURE);
     }
 
     cv::Mat img;

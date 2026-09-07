@@ -107,6 +107,11 @@ namespace RingMeasure {
                 system_ready = true;
             }
 
+            void setSystemCorrection(const std::array<RingMeasure::ScanCfg, static_cast<size_t>(rm::ScanLocation::NUM)> &correction)
+            { 
+                system.robot.scans = correction;
+            }
+
             std::array<pcl::PointCloud<pcl::PointXYZ>::Ptr, NUM> rawRecs() const { return raw_recs; }
 
             std::array<pcl::PointCloud<pcl::PointNormal>::Ptr, NUM> getLaterals() const { return laterals; }

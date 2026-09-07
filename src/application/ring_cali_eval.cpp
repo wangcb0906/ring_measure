@@ -23,6 +23,7 @@
 #include <boost/multi_array.hpp>
 #include <fstream>
 #include <argparse/argparse.hpp>
+#include <omp.h>
 
 int
 main (int argc, char* argv[])
@@ -116,33 +117,48 @@ main (int argc, char* argv[])
     rm::loadSystemConfig(system_cfg_file, sys);
     SPDLOG_LOGGER_INFO(logger, "Loaded configuration from {}.", system_cfg_file);
     rm::MeasureCfg measure;
+
+    thread_local std::shared_ptr<spdlog::logger> thread_active_logger = nullptr;
+    // Register the PCL callback ONCE globally before the loop
+    pcl::console::Logger::getInstance().setCallback([](const pcl::console::LogRecord& record) {
+        if (thread_active_logger) {
+            // Dynamically wrap the active thread's logger using your existing function
+            auto handler = createPclLogHandler(thread_active_logger);
+            handler(record); // Process the PCL log record with the correct logger and metadata
+        }
+    });
+    auto start = std::chrono::high_resolution_clock::now();
+    // Add the OpenMP directive here!
+    #pragma omp parallel for schedule(dynamic)
     for (size_t cali_idx = 0; cali_idx < calis.size(); ++cali_idx) {
         const auto& cali_cfg_file = calis[cali_idx];
         if(single_cali_file && cali_cfg_file != single_cali_file.value()) {
             continue;
         }
         rm::RingCalibration cali;
-        logger=spdlog::basic_logger_mt("MeasureCali_" + std::to_string(cali_idx), 
+        cali.setSystem(sys);
+        auto logger=spdlog::basic_logger_mt("MeasureCali_" + std::to_string(cali_idx), 
             (measure_root / ("[" + std::to_string(cali_idx) + "]=" + cali_cfg_file + ".log")).string(), true);
         logger->set_level(spdlog::level::trace);
         logger->set_pattern("[%Y-%m-%d %H:%M:%S] [%l] [%s:%#] %v");
         // wrapper the PCl logger with time and level information
-        auto timeLevelCallback = createPclLogHandler(logger);
-        pcl::console::Logger::getInstance().setCallback(timeLevelCallback);
+        // auto timeLevelCallback = createPclLogHandler(logger);
+        // pcl::console::Logger::getInstance().setCallback(timeLevelCallback);
+        // Bind this thread's execution context to this specific logger
+        thread_active_logger = logger;
         cali.setLogger(logger);
         cali.setParam(param);
         // Read the bianary calibration configuration file
         fs::path cali_cfg_bin = cali_path / "calibrations" / cali_cfg_file;
         assert(fs::exists(cali_cfg_bin) && "The binary cali config file does not exist.");
         std::ifstream in_file(cali_cfg_bin, std::ios::binary);
-        std::array<RingMeasure::ScanCfg, static_cast<size_t>(rm::ScanLocation::NUM)> &
-            cfgs_read = sys.robot.scans;
+        std::array<RingMeasure::ScanCfg, static_cast<size_t>(rm::ScanLocation::NUM)> cfgs_read;
         in_file.read(
                 reinterpret_cast<char*>(cfgs_read.data()),
                 cfgs_read.size() * sizeof(RingMeasure::ScanCfg)
                 );
         in_file.close();
-        cali.setSystem(sys);
+        cali.setSystemCorrection(cfgs_read);
 
         fs::path root_out_path = measure_root / cali_cfg_file;
         CREATE_DIR(logger, root_out_path);
@@ -180,11 +196,15 @@ main (int argc, char* argv[])
         
         auto end_time = std::chrono::high_resolution_clock::now();
         auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
+        SPDLOG_LOGGER_INFO(logger, "Thread {} has finished processing the evaluation {}.\n\n\n", omp_get_thread_num(), cali_cfg_file);
         SPDLOG_LOGGER_INFO(logger, "Total execution time: {} ms", duration.count());
-        SPDLOG_LOGGER_INFO(logger, "Finished processing the evaluation {}.\n\n\n", cali_cfg_file);
+        SPDLOG_LOGGER_INFO(spdlog::default_logger(), "Thread {} has finished processing the evaluation {}.", omp_get_thread_num(), cali_cfg_file);
         SPDLOG_LOGGER_INFO(spdlog::default_logger(), "Total execution time: {} ms", duration.count());
-        SPDLOG_LOGGER_INFO(spdlog::default_logger(), "Finished processing the evaluation {}.", cali_cfg_file);
     }
+
+    auto end = std::chrono::high_resolution_clock::now();
+    auto total_duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+    SPDLOG_LOGGER_INFO(spdlog::default_logger(), "Total execution time for all evaluations: {} ms", total_duration.count());
 
     std::string path_str = measure_root.string();
     float da = measure.ring.dA/2;
@@ -224,7 +244,6 @@ main (int argc, char* argv[])
         eval_recon.num_elements() * sizeof(rm::RingCalibration::ReconMetricsArray)
     );
 
-    SPDLOG_LOGGER_INFO(logger, "Finished processing the measure configuration folder: {}", config_path);
     SPDLOG_LOGGER_INFO(spdlog::default_logger(), "Finished processing the measure configuration folder: {}", config_path);
 
     //     // write the reconstructed point clouds to PLY files for visualization

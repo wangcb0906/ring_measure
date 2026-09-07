@@ -16,6 +16,9 @@ foreach(APP IN ITEMS "${APP1}" "${APP2}")
     get_filename_component(APP_NAME "${APP}" NAME)
     message(STATUS "Deploying executable: ${APP_NAME}")
     file(COPY "${APP}" DESTINATION "${DEPLOY_DIR}")
+    if(STRIP)
+        execute_process(COMMAND "${STRIP}" "${DEPLOY_DIR}/${APP_NAME}")
+    endif()
 endforeach()
 
 # ============================================================
@@ -24,6 +27,7 @@ endforeach()
 message(STATUS "Runtime DLL search directory:")
 message(STATUS "  ${MINGW_BIN_DIR}")
 find_program(OBJDUMP x86_64-w64-mingw32-objdump REQUIRED)
+find_program(STRIP x86_64-w64-mingw32-strip REQUIRED)
 set(RESOLVED_DEPS)
 set(PENDING_FILES "${APP1};${APP2}")
 
@@ -41,15 +45,15 @@ while(PENDING_FILES)
     foreach(LINE IN LISTS DLL_LINES)
         string(REGEX REPLACE
             "^DLL Name:[ \t]*" "" DLL_NAME "${LINE}")
-
+        string(TOLOWER "${DLL_NAME}" DLL_NAME_LOWER)
         # Ignore Windows system DLLs
-        if(DLL_NAME MATCHES
-            "^(KERNEL32|USER32|ADVAPI32|SHELL32|OLE32|OLEAUT32|WS2_32|GDI32|COMDLG32|api-ms-win-|ucrtbase|vcruntime).*\\.dll$"
+        if(DLL_NAME_LOWER MATCHES
+            "^(kernel32|user32|advapi32|shell32|ole32|oleaut32|ws2_32|gdi32|comdlg32|api-ms-win-|ucrtbase|vcruntime).*\\.dll$"
         )
             continue()
         endif()
 
-        find_file(DLL_PATH NAMES "${DLL_NAME}" PATHS "${MINGW_BIN_DIR}" NO_DEFAULT_PATH)
+        find_file(DLL_PATH NAMES "${DLL_NAME}" PATHS "${MINGW_BIN_DIR}" "${BUILD_DIR}" NO_DEFAULT_PATH)
 
         if(DLL_PATH)
             list(FIND RESOLVED_DEPS "${DLL_PATH}" DEP_INDEX)
@@ -90,7 +94,7 @@ if(MINGW)
     foreach(DLL_NAME IN LISTS MINGW_RUNTIME_DLL_NAMES)
         find_file(
             MINGW_RUNTIME_DLL NAMES "${DLL_NAME}"
-            PATHS ${MINGW_BIN_DIR} NO_DEFAULT_PATH
+            PATHS ${MINGW_BIN_DIR} "${BUILD_DIR}" NO_DEFAULT_PATH
         )
         if(NOT MINGW_RUNTIME_DLL)
             message(FATAL_ERROR
@@ -121,6 +125,18 @@ if(UNRESOLVED_DEPS)
     message(WARNING "The following runtime dependencies could not be resolved:")
     foreach(DEP IN LISTS UNRESOLVED_DEPS)
         message(WARNING "  ${DEP}")
+    endforeach()
+endif()
+
+# ============================================================
+# Strip binaries to reduce deployment size
+# ============================================================
+if(STRIP)
+    message(STATUS "")
+    message(STATUS "Stripping debug symbols from binaries...")
+    file(GLOB_RECURSE BINARIES_TO_STRIP "${DEPLOY_DIR}/*.dll" "${DEPLOY_DIR}/*.exe")
+    foreach(BIN IN LISTS BINARIES_TO_STRIP)
+        execute_process(COMMAND "${STRIP}" "${BIN}" OUTPUT_QUIET ERROR_QUIET)
     endforeach()
 endif()
 

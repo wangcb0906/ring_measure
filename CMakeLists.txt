@@ -23,6 +23,7 @@ endif()
 
 find_package(spdlog REQUIRED)
 find_package(OpenCV 5 REQUIRED COMPONENTS core imgproc imgcodecs)
+find_package(TIFF REQUIRED)
 if(MINGW)
     set(Boost_USE_STATIC_LIBS OFF)
     set(Boost_USE_STATIC_RUNTIME OFF)
@@ -67,7 +68,7 @@ add_compile_definitions(
 # ------------------------------------------------------------
 
 file(GLOB CORE_SHARED "src/*.cpp")
-add_library(${CORE_LIB} OBJECT ${CORE_SHARED})
+add_library(${CORE_LIB} SHARED ${CORE_SHARED})
 
 target_include_directories(${CORE_LIB} PUBLIC 
                            ${CMAKE_CURRENT_SOURCE_DIR}/include
@@ -80,6 +81,7 @@ target_link_libraries(${CORE_LIB} PUBLIC
                       ${PCL_LIBRARIES}
                       spdlog::spdlog
                       ${JSONCPP_LIBRARY}
+                      TIFF::tiff
                        )
 
 # ------------------------------------------------------------
