@@ -156,32 +156,26 @@ main (int argc, char* argv[])
         CREATE_DIR(logger, path);
 
         #ifndef RING_MEASURE_VERIFY_ONLY
-            cali.setPhaseType(rm::PhaseType::CALI);
             cali.calibration(rm::ScanLocation::Out, path);
         #endif
 
         #ifndef RING_MEASURE_CALI_ONLY
-            cali.setPhaseType(rm::PhaseType::VERI);
             cali.verification(rm::ScanLocation::Out, path);
         #endif
 
         #ifndef RING_MEASURE_VERIFY_ONLY
-            cali.setPhaseType(rm::PhaseType::CALI);
             cali.calibration(rm::ScanLocation::In, path);
         #endif
 
         #ifndef RING_MEASURE_CALI_ONLY
-            cali.setPhaseType(rm::PhaseType::VERI);
             cali.verification(rm::ScanLocation::In, path);
         #endif
 
         #ifndef RING_MEASURE_VERIFY_ONLY
-            cali.setPhaseType(rm::PhaseType::CALI);
             cali.calibration(rm::ScanLocation::Under, path);
         #endif
 
         #ifndef RING_MEASURE_CALI_ONLY
-            cali.setPhaseType(rm::PhaseType::VERI);
             cali.verification(rm::ScanLocation::Under, path);
         #endif
 

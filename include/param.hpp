@@ -95,7 +95,7 @@ namespace RingMeasure {
         float ellipse_fit_dist_thld = 0.1f;
         /// If true, use MAD to estimate the radius from the slices,
         /// otherwise, use cylinder fitting.
-        bool slices_mad_enabled = false;
+        bool slices_mad_enabled = true;
         /// The threshold for MAD to detect outliers.
         /// See mad.hpp to tune the threshold for outlier detection.
         float mad_thld = 2.0f;

@@ -107,10 +107,6 @@ namespace RingMeasure {
                 system_ready = true;
             }
 
-            std::array<float, NUM> angleEst() const { return angle_est; }
-
-            std::array<Point2f, NUM> posEst() const { return pos_est; }
-
             std::array<pcl::PointCloud<pcl::PointXYZ>::Ptr, NUM> rawRecs() const { return raw_recs; }
 
             std::array<pcl::PointCloud<pcl::PointNormal>::Ptr, NUM> getLaterals() const { return laterals; }
@@ -121,7 +117,7 @@ namespace RingMeasure {
 
             std::array<std::array<float, axis_num>, NUM> radiusEval() const { return radius_eval; }
 
-            std::array<std::array<float, axis_num>, NUM> angleEval() const { return angle_eval; }
+            std::array<std::array<std::array<float, 2>, axis_num>, NUM> angleEval() const { return angle_eval; }
 
             /**
              * @brief Computes global multi-scan reconstruction evaluation metrics.
@@ -134,14 +130,14 @@ namespace RingMeasure {
                 });
                 std::array<Eigen::Vector3f, NUM> axises;
                 std::transform(cyl_fit.begin(), cyl_fit.end(), axises.begin(), [](const CYLFitMetricTuple& t) {
-                    return std::get<2>(t);
+                    return std::get<1>(t);
                 });
                 std::array<Eigen::Vector3f, NUM> base_normals;
                 std::transform(base_fit.begin(), base_fit.end(), base_normals.begin(), [](const BaseFitMetricTuple& t) {
                     return std::get<1>(t);
                 });
                 // distance(max), cos(min), cos(min) 
-                ReconMetricsArray ret{0.0,-1.0, -1.0};
+                ReconMetricsArray ret{0.0, 2.0, 2.0};
                 for (size_t i = 0; i < center_points.size(); ++i)
                     for (size_t j = i + 1; j < center_points.size(); ++j){
                         ret[static_cast<size_t>(ReconMetrics::CENTER_CYL_FIT)] =
@@ -162,8 +158,8 @@ namespace RingMeasure {
              */
             ScanMetricsArray scanEval() const {
                 ScanMetricsArray ret{0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
-                ret[static_cast<size_t>(ScanMetrics::ANGLE_MAJOR_LINE_FIT)] = angle_eval[loc][static_cast<size_t>(rm::AxisType::MAJOR)];
-                ret[static_cast<size_t>(ScanMetrics::ANGLE_MINOR_LINE_FIT)] = angle_eval[loc][static_cast<size_t>(rm::AxisType::MINOR)];
+                ret[static_cast<size_t>(ScanMetrics::ANGLE_MAJOR_LINE_FIT)] = std::acos(angle_eval[loc][static_cast<size_t>(rm::AxisType::MAJOR)][0]) * 180.0 / M_PI;
+                ret[static_cast<size_t>(ScanMetrics::ANGLE_MINOR_LINE_FIT)] = std::acos(angle_eval[loc][static_cast<size_t>(rm::AxisType::MINOR)][0]) * 180.0 / M_PI;
                 ret[static_cast<size_t>(ScanMetrics::RADIUS_MAJOR_LINE_FIT)] = radius_eval[loc][static_cast<size_t>(rm::AxisType::MAJOR)];
                 ret[static_cast<size_t>(ScanMetrics::RADIUS_MINOR_LINE_FIT)] = radius_eval[loc][static_cast<size_t>(rm::AxisType::MINOR)];
                 ret[static_cast<size_t>(ScanMetrics::RADIUS_CYL_FIT)] = std::get<0>(cyl_fit[loc]);
@@ -288,13 +284,13 @@ namespace RingMeasure {
             float smallest_value;                   ///< Smallest value in the point cloud
 
             // result from cylinder fitting
-            std::array<float, NUM> angle_est;
-            std::array<Point2f, NUM> pos_est;
             std::array<CYLFitMetricTuple, NUM> cyl_fit;
 
             // result from line fitting
             std::array<std::array<float, axis_num>, NUM> radius_eval;
-            std::array<std::array<float, axis_num>, NUM> angle_eval;
+            std::array<std::array<std::array<float, 2>, axis_num>, NUM> angle_eval;
+
+            // result from plane fitting
             std::array<BaseFitMetricTuple, NUM> base_fit;
 
             std::array<pcl::PointCloud<pcl::PointXYZ>::Ptr, NUM> raw_recs{nullptr};

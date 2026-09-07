@@ -21,6 +21,7 @@
 // #include <pcl/surface/gp3.h>
 
 #include <boost/multi_array.hpp>
+#include <fstream>
 #include <argparse/argparse.hpp>
 
 int
@@ -37,8 +38,7 @@ main (int argc, char* argv[])
            .help("Folder to calibrate or a single measure configuration file.");
 
     program.add_argument("-c", "--calibration")
-           .help("Path to the calibration results")
-           .default_value(std::string("result"));
+           .help("Path to the calibration results");
 
     try {
         program.parse_args(argc, argv);
@@ -51,7 +51,22 @@ main (int argc, char* argv[])
     }
 
     fs::path root = program.get<std::string>("cali");
-    fs::path cali_path = root / program.get<std::string>("--calibration");
+
+    auto cali_result = program.present<std::string>("--calibration");
+    fs::path cali_path;
+    fs::path paramters;
+    if(cali_result){
+        cali_path = root / cali_result.value();
+        paramters = root / (cali_result.value() + ".ini");
+    }
+    else{
+        cali_path = root / "result";
+        paramters = root / "parameters.ini";
+    }
+
+    rm::ParamTune param;
+    rm::loadParam(paramters, param);
+    SPDLOG_LOGGER_INFO(logger, "Loaded calibration parameters from {}.", paramters);
     fs::path config_path = root / "config";
 
     std::vector<std::string> calis;
@@ -67,9 +82,7 @@ main (int argc, char* argv[])
     }
 
     auto system_cfg_file = root / "system.ini";
-
-    SPDLOG_LOGGER_WARN(logger, "Starting reconstruction...");
-    fs::path measure_root(cali_path / ("measure_cali_" + program.get<std::string>("--calibration")));
+    fs::path measure_root(cali_path.string() + "_cali_eval");
     CREATE_DIR(logger, measure_root);
 
     constexpr std::array<rm::ScanLocation, static_cast<size_t>(rm::ScanLocation::NUM)> scan_locs = {
@@ -91,11 +104,10 @@ main (int argc, char* argv[])
     rm::SystemCfg sys;
     rm::loadSystemConfig(system_cfg_file, sys);
     SPDLOG_LOGGER_INFO(logger, "Loaded configuration from {}.", system_cfg_file);
-
+    rm::MeasureCfg measure;
     for (size_t cali_idx = 0; cali_idx < calis.size(); ++cali_idx) {
     
         rm::RingCalibration cali;
-        cali.setPhaseType(rm::PhaseType::VERI);
         const auto& cali_cfg_file = calis[cali_idx];
         logger=spdlog::basic_logger_mt("MeasureCali_" + std::to_string(cali_idx), 
             (measure_root / ("[" + std::to_string(cali_idx) + "]=" + cali_cfg_file + ".log")).string(), true);
@@ -105,7 +117,7 @@ main (int argc, char* argv[])
         auto timeLevelCallback = createPclLogHandler(logger);
         pcl::console::Logger::getInstance().setCallback(timeLevelCallback);
         cali.setLogger(logger);
-
+        cali.setParam(param);
         // Read the bianary calibration configuration file
         fs::path cali_cfg_bin = cali_path / "calibrations" / cali_cfg_file;
         assert(fs::exists(cali_cfg_bin) && "The binary cali config file does not exist.");
@@ -131,7 +143,6 @@ main (int argc, char* argv[])
             fs::path ring_path = root_out_path / ring;
             CREATE_DIR(logger, ring_path);
             SPDLOG_LOGGER_CRITICAL(logger, "Processing Ring {} with config {}", ring,  cali_cfg_file);
-            rm::MeasureCfg measure;
             rm::loadMeasureConfig(config_path / (ring + ".ini"), measure);
             cali.setMeasure(measure);
             for (const auto& scan : scan_locs)
@@ -143,17 +154,14 @@ main (int argc, char* argv[])
                 {
                     eval_scan[loc][cali_idx][eval_idx][static_cast<size_t>(rm::RingCalibration::ScanMetrics::H_PLANE_FIT)] -= 10;
                 }
+                if(cali_cfg_file.find("_3_1") != std::string::npos)
+                {   
+                    eval_scan[loc][cali_idx][eval_idx][static_cast<size_t>(rm::RingCalibration::ScanMetrics::H_PLANE_FIT)] += 10;
+                }
             }
-
             eval_recon[cali_idx][eval_idx] = cali.reconEval();
-            std::string path_str = measure_root.string();
-            float da = measure.ring.dA;
-            float di = measure.ring.dI;
-            float h = measure.ring.h;
-            float table_h = sys.robot.table_h;
-            // /py eval.plot_eval($da, $di, $h, $table_h) if ($eval_idx+1==$size and $cali_idx+1==$size) else False
-            int a = 0; // placeholder
         }
+        
         auto end_time = std::chrono::high_resolution_clock::now();
         auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
         SPDLOG_LOGGER_WARN(logger, "Total execution time: {} ms", duration.count());
@@ -161,7 +169,47 @@ main (int argc, char* argv[])
         SPDLOG_LOGGER_WARN(spdlog::default_logger(), "Total execution time: {} ms", duration.count());
         SPDLOG_LOGGER_INFO(spdlog::default_logger(), "Finished processing the evaluation {}.", cali_cfg_file);
     }
-    
+
+    std::string path_str = measure_root.string();
+    float da = measure.ring.dA/2;
+    float di = measure.ring.dI/2;
+    float h = measure.ring.h;
+    float table_h = sys.robot.table_h - sys.robot.wedge_h;
+    float metadata[4] = {da, di, h, table_h};
+    // /py eval.plot_eval($da, $di, $h, $table_h)
+
+    // Write the evaluation results to a bianary file to enable release mode.
+    // save 30 seconds to iterate.
+    std::ofstream scan_out((measure_root / "scan.bin").string(), std::ios::out | std::ios::binary | std::ios::trunc);
+    if (!scan_out.is_open()) {
+        throw std::runtime_error("Failed to open file for binary writing: ");
+    }
+    const auto* shape = eval_scan.shape();
+    size_t scan_metrics_len = std::tuple_size<rm::RingCalibration::ScanMetricsArray>::value;
+    size_t scan_full_shape[4] = { shape[0], shape[1], shape[2], scan_metrics_len };
+    scan_out.write(reinterpret_cast<const char*>(scan_full_shape), 4 * sizeof(size_t));
+    scan_out.write(reinterpret_cast<const char*>(metadata), sizeof(metadata));
+    scan_out.write(
+        reinterpret_cast<const char*>(eval_scan.data()), 
+        eval_scan.num_elements() * sizeof(rm::RingCalibration::ScanMetricsArray)
+    );
+
+    std::ofstream recon_out((measure_root / "recon.bin").string(), std::ios::out | std::ios::binary | std::ios::trunc);
+    if (!recon_out.is_open()) {
+        throw std::runtime_error("Failed to open file for binary writing ");
+    }
+    shape = eval_recon.shape();
+    size_t rec_metrics_len = std::tuple_size<rm::RingCalibration::ReconMetricsArray>::value;
+    size_t recon_full_shape[3] = { shape[0], shape[1], rec_metrics_len };
+    recon_out.write(reinterpret_cast<const char*>(recon_full_shape), 3 * sizeof(size_t));
+    recon_out.write(reinterpret_cast<const char*>(metadata), sizeof(metadata));
+    recon_out.write(
+        reinterpret_cast<const char*>(eval_recon.data()), 
+        eval_recon.num_elements() * sizeof(rm::RingCalibration::ReconMetricsArray)
+    );
+
+    SPDLOG_LOGGER_INFO(logger, "Finished processing the measure configuration folder: {}", config_path);
+
     //     // write the reconstructed point clouds to PLY files for visualization
     //     *rec_out += *rec_in;
     //     *rec_out += *rec_under;

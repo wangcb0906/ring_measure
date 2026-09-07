@@ -3,6 +3,18 @@
     "tasks": [
         {
             "type": "shell",
+            "label": "cmake_configure",
+            "command": "cmake",
+            "args": [
+                "-B",
+                "build",
+                "-DLOG_LEVEL=TRACE",
+                "-DCMAKE_BUILD_TYPE=Debug"
+            ],
+            "detail": "Configure CMake project."
+        },
+        {
+            "type": "shell",
             "label": "build_cali",
             "command": "cmake",
             "args": [
@@ -11,6 +23,9 @@
                 "--target",
                 "ring_cali",
                 "-j",
+            ],
+            "dependsOn": [
+                "cmake_configure"
             ],
             "group": {
                 "kind": "build",
@@ -29,6 +44,9 @@
                 "--target",
                 "ring_cali_eval",
                 "-j",
+            ],
+            "dependsOn": [
+                "cmake_configure"
             ],
             "group": {
                 "kind": "build",

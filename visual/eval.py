@@ -1,8 +1,5 @@
 import lldb # type: ignore
-import debugger # type: ignore
-import gc
 import os.path
-import plotly.graph_objects as go
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
@@ -109,7 +106,7 @@ def plot_eval(da, di, h, table_h):
     # };
     table = {
         0: ["In", di, table_h + h],
-        1: ["Out", di, table_h + h],
+        1: ["Out", da, table_h + h],
         2: ["Under", da, table_h]
     }
 

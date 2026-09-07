@@ -248,10 +248,10 @@ namespace RingMeasure {
         // put the break point after ret so path can be initialized before the Python script is called.
         // /py profile.plot_profile($show)
 
-        angle_est[loc] = std::atan2(line[1], line[0]) * 180 / M_PI;
-        SPDLOG_LOGGER_INFO(logger, "[Major] Estimated angle of the cone: {} degrees.", std::atan2(line_major[1], line_major[0]) * 180 / M_PI);
-        SPDLOG_LOGGER_INFO(logger, "[Minor] Estimated angle of the cone: {} degrees.", angle_est[loc]);
-        
+        SPDLOG_LOGGER_INFO(logger, "[Major] Estimated angle of the cone: {} degrees.", std::acos(line_major[0]) * 180 / M_PI);
+        SPDLOG_LOGGER_INFO(logger, "[Minor] Estimated angle of the cone: {} degrees.", std::acos(line[0]) * 180 / M_PI);
+        angle_eval[loc][static_cast<size_t>(AxisType::MAJOR)] = std::array<float, 2>{line_major[0], line_major[1]};
+        angle_eval[loc][static_cast<size_t>(AxisType::MINOR)] = std::array<float, 2>{line[0], line[1]};
         if(params.slices_mad_enabled && rm::PhaseType::VERI == phase_type)
         {
             SPDLOG_LOGGER_DEBUG(logger, "Radius and angle estimation from line fitting enabled for verification.");
@@ -359,9 +359,6 @@ namespace RingMeasure {
              Eigen::Vector3f(cylinder_coeff->values[0], cylinder_coeff->values[1], cylinder_coeff->values[2])
         );
 
-        // Save the estimated position to pos_est
-        pos_est[loc].x = cylinder_coeff->values[6];
-
         // Estimate the position of the mount table.
         // Always set the table at the height of 982mm.
         seg.setModelType(pcl::SACMODEL_NORMAL_PLANE);
@@ -377,7 +374,6 @@ namespace RingMeasure {
         pcl::PointIndices::Ptr plane_inliers(new pcl::PointIndices);
 
         seg.segment(*plane_inliers, *plane_coeff);
-        pos_est[loc].y = plane_coeff->values[3];
 
         pcl::PointCloud<pcl::PointNormal>::Ptr plane_cloud(new pcl::PointCloud<pcl::PointNormal>());
         // Output Results
@@ -438,6 +434,7 @@ namespace RingMeasure {
         }
         auto ss = scanLocationToString(scan);
         setScanLoc(scan);
+        setPhaseType(rm::PhaseType::CALI);
         auto path_den = path / (str(ss) + "_cali_denoise");
         CREATE_DIR(logger, path_den);
         auto path_seg = path / (str(ss) + "_cali_segment");
@@ -465,14 +462,16 @@ namespace RingMeasure {
         SPDLOG_LOGGER_INFO(logger, "Rotation calibration for '{}' scan completed.", ss);
 
         // Update the setting of system and measure after the rotation calibration.
+        std::array<float, 2> &direction = angle_eval[loc][static_cast<size_t>(AxisType::MINOR)];
+        float angle = std::atan2(direction[1], direction[0]) * 180 / M_PI;
         switch (scan)
         {
             case rm::ScanLocation::Out:
             case rm::ScanLocation::Under:
-                system.robot.scans[loc].angle_corr -= angle_est[loc];
+                system.robot.scans[loc].angle_corr -= angle;
                 break;
             case rm::ScanLocation::In:
-                system.robot.scans[loc].angle_corr += angle_est[loc];
+                system.robot.scans[loc].angle_corr += angle;
                 break;
             default: break;
         }
@@ -486,15 +485,16 @@ namespace RingMeasure {
         SPDLOG_LOGGER_INFO(logger, "Translation calibration for '{}' scan completed.", ss);
 
         // Update the setting of system and measure after the translation calibration.
+        auto pos_est = rm::Point2f(std::get<0>(cyl_fit[loc]), std::get<0>(base_fit[loc]));
         switch (scan)
-        {
+        {   
             case rm::ScanLocation::Out:
             {
                 // Compute the real radius of the ring. radius = ring.dA/2
                 // Compute the real postion of the plane. pos = table_h + ring.h
                 rm::Point2f out_real (measure.ring.dA/2.0f,
                     system.robot.table_h + measure.ring.h - system.robot.wedge_h);
-                rm::Point2f out_correction = pos_est[loc] - out_real;
+                rm::Point2f out_correction = pos_est - out_real;
                 system.robot.scans[loc].pos_corr.x += out_correction.x;
                 system.robot.scans[loc].pos_corr.y -= out_correction.y;
                 break;
@@ -505,7 +505,7 @@ namespace RingMeasure {
                 // Compute the real postion of the plane. pos = table_h + ring.h
                 rm::Point2f in_real (measure.ring.dI/2.0f,
                     system.robot.table_h + measure.ring.h - system.robot.wedge_h);
-                rm::Point2f in_correction = pos_est[loc] - in_real;
+                rm::Point2f in_correction = pos_est - in_real;
                 system.robot.scans[loc].pos_corr -= in_correction;
                 break;
             }
@@ -515,7 +515,7 @@ namespace RingMeasure {
                 // Compute the real postion of the plane. pos = table_h
                 rm::Point2f under_real (measure.ring.dA/2.0f,
                     system.robot.table_h - system.robot.wedge_h);
-                rm::Point2f under_correction = pos_est[loc] - under_real;
+                rm::Point2f under_correction = pos_est - under_real;
                 system.robot.scans[loc].pos_corr -= under_correction;
                 break;
             }
@@ -534,6 +534,7 @@ namespace RingMeasure {
         }
         auto ss = scanLocationToString(scan);
         setScanLoc(scan);
+        setPhaseType(rm::PhaseType::VERI);
         auto path_den = path / (str(ss) + "_veri_denoise");
         CREATE_DIR(logger, path_den);
         auto path_seg = path / (str(ss) + "_veri_segment");
