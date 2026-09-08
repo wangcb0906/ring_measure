@@ -53,6 +53,7 @@ namespace {
     float getCurvThld(const pcl::PointCloud<pcl::PointNormal>::Ptr& cloud,
                       const std::filesystem::path ply_path,
                       const RingMeasure::RegionGrowing& params,
+                      const int scans,
                       const std::shared_ptr<spdlog::logger> &logger)
     {
 
@@ -116,7 +117,7 @@ namespace {
                 }
             );
             float ratio = params.curv_thld_ratio;
-            int percentile_index = 360 * ratio;
+            int percentile_index = scans * ratio;
             percentile_curv_thld = points[percentile_index][0];
             SPDLOG_LOGGER_TRACE(logger, "Percentile index for curvature threshold: {} and value: {}", percentile_index, percentile_curv_thld);
         }
@@ -426,7 +427,7 @@ namespace RingMeasure {
                 reg.setCurvatureThreshold (params.curvature_thld);
             } else if(params.curvature_type == OperationMode::AUTO)
             {
-                curv_thld = getCurvThld(nan_curv_removed, path / (prefix + "curv_clustering_visualization.ply"), params, logger);
+                curv_thld = getCurvThld(nan_curv_removed, path / (prefix + "curv_clustering_visualization.ply"), params, getScanNum(), logger);
                 reg.setCurvatureThreshold (curv_thld);
                 SPDLOG_LOGGER_INFO(logger, "Curvature threshold is automatically determined.");
             } else 

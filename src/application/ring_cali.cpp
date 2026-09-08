@@ -10,6 +10,7 @@
 #include <spdlog/fmt/std.h>
 
 #include <argparse/argparse.hpp>
+#include <omp.h>
  
 #include "param.hpp"
 #include "visualization.hpp"
@@ -72,7 +73,6 @@ main (int argc, char* argv[])
         return 1;
     }
 
-    rm::RingCalibration cali;
     auto parameters = program.present<std::string>("--parameter");
     rm::ParamTune param;
     fs::path out_root = root / "result";
@@ -80,12 +80,11 @@ main (int argc, char* argv[])
         auto aux = fs::path(parameters.value());
         out_root = root / aux.stem();
         SPDLOG_LOGGER_INFO(logger, "Output root directory set to {} based on parameter file.", out_root);
+        aux = root / aux.filename();
         rm::loadParam(aux, param);
         SPDLOG_LOGGER_INFO(logger, "Loaded calibration parameters from {}.", aux);
-        cali.setParam(param);
     }
     else {
-        out_root = root / "result";
         SPDLOG_LOGGER_INFO(logger, "Using default parameters.");
         SPDLOG_LOGGER_INFO(logger, "Output root directory set to {}.", out_root);
     }
@@ -110,34 +109,60 @@ main (int argc, char* argv[])
 
     auto single_cfg_file = program.present<std::string>("--ring-cfg");
 
-    for (const auto& measure_cfg_file : fs::directory_iterator(config_path)) {
+    thread_local std::shared_ptr<spdlog::logger> thread_active_logger = nullptr;
+    // Register the PCL callback ONCE globally before the loop
+    pcl::console::Logger::getInstance().setCallback([](const pcl::console::LogRecord& record) {
+        if (thread_active_logger) {
+            // Dynamically wrap the active thread's logger using your existing function
+            auto handler = createPclLogHandler(thread_active_logger);
+            handler(record); // Process the PCL log record with the correct logger and metadata
+        }
+    });
+
+    std::vector<fs::path> calis;
+    if (fs::exists(config_path) && fs::is_directory(config_path)) {
+        // Populate vector directly using directory iterator range
+        SPDLOG_LOGGER_INFO(logger, "Processing the measure configuration folder: {}", config_path);
+        for (auto const& entry : fs::directory_iterator(config_path)) {
+            calis.push_back(entry.path());
+        }
+        std::sort(calis.begin(), calis.end());
+    } else {
+        SPDLOG_LOGGER_ERROR(logger, "Directory {} does not exist.", config_path);
+        exit(EXIT_FAILURE);
+    }
+
+    int size = calis.size();
+    auto start = std::chrono::high_resolution_clock::now();
+    #pragma omp parallel for schedule(dynamic)
+    for (int cali_idx = 0; cali_idx < size; ++cali_idx) {
+        const auto& measure_cfg_file = calis[cali_idx];
 
         // If the argument is a file, only process that specific file
-        if(single_cfg_file && measure_cfg_file.path().filename() != single_cfg_file) {
+        if(single_cfg_file && measure_cfg_file.filename() != single_cfg_file) {
             continue;
         }
-
-        auto start_time = std::chrono::high_resolution_clock::now();
-
-        fs::path ring = measure_cfg_file.path().filename();
+        rm::RingCalibration cali;
+        fs::path ring = measure_cfg_file.filename();
         if(single_cfg_file){
             ring = ring.stem().string() + "_" + program.get<std::string>("--suffix") + ring.extension().string();
         }
         auto log_file = log_path / ring.replace_extension(".log");
-        logger=spdlog::basic_logger_mt(ring.string(), log_file.string(), true);
+        auto logger=spdlog::basic_logger_mt(ring.string(), log_file.string(), true);
         logger->set_level(spdlog::level::trace);
         logger->set_pattern("[%Y-%m-%d %H:%M:%S] [%l] [%s:%#] %v");
         // wrapper the PCl logger with time and level information
-        auto timeLevelCallback = createPclLogHandler(logger);
-        pcl::console::Logger::getInstance().setCallback(timeLevelCallback);
+        thread_active_logger = logger;
         cali.setLogger(logger);
-        // system_cfg_file = "config/20260622/calibrated/system_4_ND_20260622_4_19.ini";
+        cali.setParam(param);
+
+        auto start_time = std::chrono::high_resolution_clock::now();
         SPDLOG_LOGGER_WARN(logger, "Starting calibration...");
-        SPDLOG_LOGGER_INFO(logger, "Processing Ring {}", measure_cfg_file.path().stem());
-        SPDLOG_LOGGER_INFO(spdlog::default_logger(), "Processing Ring {}", measure_cfg_file.path().stem());
+        SPDLOG_LOGGER_INFO(logger, "Processing Ring {}", measure_cfg_file.stem());
+        SPDLOG_LOGGER_INFO(spdlog::default_logger(), "Thread {:2d} is processing Ring {}", omp_get_thread_num(), measure_cfg_file.stem());
         rm::MeasureCfg measure;
-        rm::loadMeasureConfig(measure_cfg_file.path(), measure);
-        SPDLOG_LOGGER_INFO(logger, "Loaded configuration from {}.", measure_cfg_file.path());
+        rm::loadMeasureConfig(measure_cfg_file, measure);
+        SPDLOG_LOGGER_INFO(logger, "Loaded configuration from {}.", measure_cfg_file);
         #ifdef RING_MEASURE_VERIFY_ONLY
         assert(fs::exists(cali_path/ring.stem()) && "The binary configuration file does not exist.");
         auto binary = cali_path/ring.stem();
@@ -152,8 +177,8 @@ main (int argc, char* argv[])
         SPDLOG_LOGGER_INFO(logger, "Loaded binary configuration from {}.", binary);
         #endif
 
-        cali.setMeasure(measure);
         cali.setSystem(sys_);
+        cali.setMeasure(measure);
     
         // Specify the path to the file system.
         fs::path path = out_root / (measure.ring.type + "_" + ring.stem().string());
@@ -318,13 +343,17 @@ main (int argc, char* argv[])
         auto end_time = std::chrono::high_resolution_clock::now();
         auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
         SPDLOG_LOGGER_WARN(logger, "Total execution time: {} ms", duration.count());
-        SPDLOG_LOGGER_INFO(logger, "Finished processing the scan from {}.\n\n\n", measure_cfg_file.path().stem());
+        SPDLOG_LOGGER_INFO(logger, "Finished processing the scan from {}.\n\n\n", measure_cfg_file.stem());
 
         logger->flush();
         if(single_cfg_file) {
             dumpParam(log_file, cali.getParam(), std::ios_base::app);
         }
     }
+
+    auto end = std::chrono::high_resolution_clock::now();
+    auto total_duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+    SPDLOG_LOGGER_INFO(spdlog::default_logger(), "Total execution time for all calibrations: {} ms", total_duration.count());
 
     if(single_cfg_file)
     {
@@ -333,7 +362,7 @@ main (int argc, char* argv[])
     else
     {   
         SPDLOG_LOGGER_INFO(spdlog::default_logger(), "Dumping the parameter file for the measure configuration folder: {}", root);
-        dumpParam(root / (out_root.filename().string() + ".ini"), cali.getParam(), std::ios_base::out | std::ios::trunc);
+        dumpParam(root / (out_root.filename().string() + ".ini"), param, std::ios_base::out | std::ios::trunc);
         SPDLOG_LOGGER_INFO(spdlog::default_logger(), "Finished processing the measure configuration folder: {}", root);
     }
     // flush all the logs and terminate the threads safely.

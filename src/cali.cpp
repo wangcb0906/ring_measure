@@ -226,7 +226,10 @@ namespace RingMeasure {
         
         SPDLOG_LOGGER_DEBUG(logger,"Points (Radius VS Height) to fit: ");
         for (const auto& pt : points) {
-          SPDLOG_LOGGER_DEBUG(logger,"Point: ({:4.3f}, {:4.6f})", pt.x, pt.y);
+          SPDLOG_LOGGER_DEBUG(logger,"Major Point: ({:4.3f}, {:4.6f})", pt.x, pt.y);
+        }
+        for (const auto& pt : points_major) {
+          SPDLOG_LOGGER_DEBUG(logger,"Minor Point: ({:4.3f}, {:4.6f})", pt.x, pt.y);
         }
         if(points.size() < 2)
         {
@@ -317,6 +320,7 @@ namespace RingMeasure {
         seg.setDistanceThreshold(params.cylinder_fit_dist_thld); 
         // seg.setDistanceThreshold(0.1); 
         seg.setRadiusLimits(10.0, diameter/2.0*1.5);
+        seg.setProbability(params.cylinder_fit_prob);
     
         // Pass the SAME cloud as both the points and the normals
         seg.setInputCloud(lateral);

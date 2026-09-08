@@ -10,7 +10,9 @@
             "args": [
                 "cali/20260622",
                 "-r",
-                "4_ND_20260622_4_19.ini"
+                "4_ND_20260622_4_19.ini",
+                "-o", "auto",
+                "-p", "auto.ini"
             ],
             "preLaunchTask": "build_cali",
             "initCommands": [

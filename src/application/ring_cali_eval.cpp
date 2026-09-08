@@ -23,6 +23,7 @@
 #include <boost/multi_array.hpp>
 #include <fstream>
 #include <argparse/argparse.hpp>
+#include <fmt/format.h>
 #include <omp.h>
 
 int
@@ -39,7 +40,10 @@ main (int argc, char* argv[])
            .help("Folder to calibrate or a single measure configuration file.");
 
     program.add_argument("-i", "--input")
-           .help("Path to the calibration results");
+           .help("Path to the calibration results")
+           .default_value(std::string("result"))
+           .help("Path to the calibration results. If not specified, the default is 'result'.\n"
+                 "Always read the parameters from the file of the same name.\n");
 
     program.add_argument("-c", "--calibration")
            .help("Specific calibration to evaluate, otherwise, \n"
@@ -61,17 +65,11 @@ main (int argc, char* argv[])
 
     fs::path root = program.get<std::string>("cali");
 
-    auto cali_result = program.present<std::string>("--input");
+    auto cali_result = program.get<std::string>("--input");
     fs::path cali_path;
     fs::path paramters;
-    if(cali_result){
-        cali_path = root / cali_result.value();
-        paramters = root / (cali_result.value() + ".ini");
-    }
-    else{
-        cali_path = root / "result";
-        paramters = root / "result.ini";
-    }
+    cali_path = root / cali_result;
+    paramters = root / (cali_result + ".ini");
 
     auto single_cali_file = program.present<std::string>("--calibration");
     auto single_eval_file = program.present<std::string>("--evaluation");
@@ -88,6 +86,7 @@ main (int argc, char* argv[])
         for (auto const& entry : fs::directory_iterator(config_path)) {
             calis.push_back(entry.path().stem().string());
         }
+        std::sort(calis.begin(), calis.end());
     } else {
         SPDLOG_LOGGER_ERROR(logger, "Directory {} does not exist.", config_path);
         exit(EXIT_FAILURE);
@@ -130,7 +129,7 @@ main (int argc, char* argv[])
     auto start = std::chrono::high_resolution_clock::now();
     // Add the OpenMP directive here!
     #pragma omp parallel for schedule(dynamic)
-    for (size_t cali_idx = 0; cali_idx < calis.size(); ++cali_idx) {
+    for (size_t cali_idx = 0; cali_idx < size; ++cali_idx) {
         const auto& cali_cfg_file = calis[cali_idx];
         if(single_cali_file && cali_cfg_file != single_cali_file.value()) {
             continue;
@@ -138,12 +137,10 @@ main (int argc, char* argv[])
         rm::RingCalibration cali;
         cali.setSystem(sys);
         auto logger=spdlog::basic_logger_mt("MeasureCali_" + std::to_string(cali_idx), 
-            (measure_root / ("[" + std::to_string(cali_idx) + "]=" + cali_cfg_file + ".log")).string(), true);
+            (measure_root / ("[" + fmt::format("{:02}", cali_idx) + "]=" + cali_cfg_file + ".log")).string(), true);
         logger->set_level(spdlog::level::trace);
         logger->set_pattern("[%Y-%m-%d %H:%M:%S] [%l] [%s:%#] %v");
         // wrapper the PCl logger with time and level information
-        // auto timeLevelCallback = createPclLogHandler(logger);
-        // pcl::console::Logger::getInstance().setCallback(timeLevelCallback);
         // Bind this thread's execution context to this specific logger
         thread_active_logger = logger;
         cali.setLogger(logger);
@@ -166,7 +163,7 @@ main (int argc, char* argv[])
         auto start_time = std::chrono::high_resolution_clock::now();
         // Start to evaluate the calibration results
 
-        for (size_t eval_idx = 0; eval_idx < calis.size(); ++eval_idx)
+        for (size_t eval_idx = 0; eval_idx < size; ++eval_idx)
         {
             const auto& ring = calis[eval_idx];
             if(single_eval_file && ring != single_eval_file.value()) {
@@ -182,11 +179,11 @@ main (int argc, char* argv[])
                 cali.verification(scan, ring_path, true);
                 auto loc = static_cast<size_t>(scan);
                 eval_scan[loc][cali_idx][eval_idx] = cali.scanEval();
-                if(ring.find("_3_1") != std::string::npos)
+                if(ring.find("_3_01") != std::string::npos)
                 {
                     eval_scan[loc][cali_idx][eval_idx][static_cast<size_t>(rm::RingCalibration::ScanMetrics::H_PLANE_FIT)] -= 10;
                 }
-                if(cali_cfg_file.find("_3_1") != std::string::npos)
+                if(cali_cfg_file.find("_3_01") != std::string::npos)
                 {   
                     eval_scan[loc][cali_idx][eval_idx][static_cast<size_t>(rm::RingCalibration::ScanMetrics::H_PLANE_FIT)] += 10;
                 }
@@ -198,7 +195,7 @@ main (int argc, char* argv[])
         auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
         SPDLOG_LOGGER_INFO(logger, "Thread {} has finished processing the evaluation {}.\n\n\n", omp_get_thread_num(), cali_cfg_file);
         SPDLOG_LOGGER_INFO(logger, "Total execution time: {} ms", duration.count());
-        SPDLOG_LOGGER_INFO(spdlog::default_logger(), "Thread {} has finished processing the evaluation {}.", omp_get_thread_num(), cali_cfg_file);
+        SPDLOG_LOGGER_INFO(spdlog::default_logger(), "Thread {:2d} has finished processing the evaluation {}.", omp_get_thread_num(), cali_cfg_file);
         SPDLOG_LOGGER_INFO(spdlog::default_logger(), "Total execution time: {} ms", duration.count());
     }
 

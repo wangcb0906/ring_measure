@@ -69,7 +69,7 @@ namespace RingMeasure {
         /// The smooth threshold for region growing,
         /// does not take effect if normal_type is AUTO
         float smooth_thld = 10.0f * M_PI / 180.0f; // Convert degrees to radians
-        // The number of clusters is set based on the observation of the point cloud.
+        /// The number of clusters is set based on the observation of the point cloud.
         int cluster_size = 3;
         /// The normal threshold mode for region growing, can be MODE1, MODE2.
         /// Mode1 is driven by kmeans clustering.
@@ -77,9 +77,13 @@ namespace RingMeasure {
         /// Mode3 takes the smaller value from MODE1 and MODE2, which is more robust to noise
         /// at the risk of discarding some valid points.
         Modes curv_thld_mode = Modes::MODE3;
-        /// This parameter depends on the number of layers you want to remove. See point cloud visualization for more details. It only takes effect when curvature_thld_mode is MODE2 or MODE3.
-        float curv_thld_ratio = 2.5;
+        /// This parameter depends on the number of layers you want to remove. 
+        /// See point cloud visualization for more details. 
+        /// It only takes effect when curvature_thld_mode is MODE2 or MODE3.
+        float curv_thld_ratio = 3.0;
         /// The number of clusters fo k-means to determine the normal threshold.
+        /// Tune this parameter only based on observation of the point cloud,
+        /// and do not change it without a good reason.
         int normal_thld_cluster_size = 4;
     };
 
@@ -104,11 +108,17 @@ namespace RingMeasure {
         /// See mad.hpp to tune the threshold for outlier detection.
         float mad_thld = 2.0f;
         /// The distance threshold for cylinder fitting.
-        float cylinder_fit_dist_thld = 0.5f; 
+        /// Set the threshold to roughly 1.5x to 2x the sensor's noise level.
+        /// Too small a threshold may result in too few inliers, while too large a threshold may include outliers.
+        /// Please refer to the sensor's datasheet for the noise level, or use the empirical default value.
+        /// The default value of 2.0mm.
+        float cylinder_fit_dist_thld = 2.0f; 
         /// The normal and distance weight for cylinder fitting.
         float cylinder_fit_normal_weight = 0.1f; 
         /// The maximum number of iterations for cylinder fitting.
         int cylinder_fit_max_iter = 10000; 
+        /// The probability for cylinder fitting, a higher value forces a more conservative fit.
+        float cylinder_fit_prob = 0.999f;
         /// The distance threshold for plane fitting.
         float plane_fit_dist_thld = 0.1f;
         /// The normal and distance weight for plane fitting.
@@ -142,9 +152,13 @@ namespace RingMeasure {
      * 
      */
     struct ParamTune{
+         /// Configuration parameters for Euclidean segmentation.
          struct Euclidean euclidean;
+         /// Configuration parameters for Region Growing.
          struct RegionGrowing reg_growing;
+         /// Configuration parameters for Primitive Fitting.
          struct PrimitiveFit primitive;
+         /// Configuration parameters for miscellaneous settings.
          struct MiscParam misc;
     };
 

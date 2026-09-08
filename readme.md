@@ -155,8 +155,16 @@ mke_btm   = 9
 da = 990
 di = 810
 h  = 90
+```
 
-
+## Document Generation
+```
+doxygen
+cd latex
+pdflatex refman.tex
+makeindex refman.idx
+pdflatex refman.tex
+pdflatex refman.tex
 ```
 
 ## Authors

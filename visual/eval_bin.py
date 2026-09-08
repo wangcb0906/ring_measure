@@ -47,6 +47,11 @@ def load_recon_binary(filename):
 
 def plot_eval(path_str, recon_file, scan_file):
 
+    root = os.path.dirname(os.path.normpath(path_str))
+    config = os.path.join(root, "config")
+    x_label = sorted(os.listdir(config))
+    x_label = [x.removesuffix(".ini")[-4:] for x in x_label]
+
     metadata_arr1, rec = load_recon_binary(recon_file)
     metadata_arr2, scan = load_scan_binary(scan_file)
 
@@ -66,10 +71,25 @@ def plot_eval(path_str, recon_file, scan_file):
         "RADIUS_CYL_FIT"         # yes cyl_fit_eval[0][0]
     ]
 
+    scan_metrics_style = [
+        "-",                     # "H_PLANE_FIT",           
+        "--",                    # "ANGLE_MAJOR_LINE_FIT",  
+        "--",                    # "ANGLE_MINOR_LINE_FIT",  
+        ":",                     # "RADIUS_MAJOR_LINE_FIT", 
+        ":",                     # "RADIUS_MINOR_LINE_FIT", 
+        "-",                     # "RADIUS_CYL_FIT"         
+    ]
+
     rec_metrics_list = [
         "CENTER_CYL_FIT",        # yes cyl_fit_eval[0][1]
         "AXIS_CYL_FIT",          # yes cyl_fit_eval[0][2]
         "BASE_PARALLELISM"       # yes base_fit[0][1]
+    ]
+
+    rec_metrics_style = [
+        "--",                    # "CENTER_CYL_FIT",
+        "--",                    # "AXIS_CYL_FIT",
+        "--"                     # "BASE_PARALLELISM"
     ]
 
     table = {
@@ -96,39 +116,64 @@ def plot_eval(path_str, recon_file, scan_file):
                col_num = metric_idx // lines_per_plot
                ax = axes[loc][col_num]
                ax.set_title(f'Scan Location {table[loc][0]}')
-               ax.plot(scan_loc[:, metric_idx], label=f'{scan_metrics_list[metric_idx]}')
-               ax.set_xlabel('Evaluation indices')
-               ax.set_ylabel('error')
+               ax.plot(x_label, scan_loc[:, metric_idx], 
+                    label=f'{scan_metrics_list[metric_idx]}',
+                    linestyle=scan_metrics_style[metric_idx])
+               ax.set_xticks(range(len(x_label)))
+               ax.set_xticklabels(x_label, rotation=90)
+               ax.set_xlabel('Evaluation Ring Name')
+               ax.set_ylabel('Error')
                ax.legend()
                ax.grid()
         for j in range(len(rec_metrics_list)):
             axes[0][2].set_title(f'Reconstruction metrics for cylinder ')
-            axes[0][2].plot(rec_cali[:, j], label=f'{rec_metrics_list[j]}')
+            axes[0][2].plot(x_label, rec_cali[:, j], 
+                            label=f'{rec_metrics_list[j]}',
+                            linestyle=rec_metrics_style[j])
+        axes[0][2].set_xticks(range(len(x_label)))
+        axes[0][2].set_xticklabels(x_label, rotation=90)
+        axes[0][2].set_xlabel('Evaluation Ring Name')
+        axes[0][2].set_ylabel('Error')
         axes[0][2].legend()
         axes[0][2].grid()
         plt.tight_layout()
-        fig.savefig(os.path.join(path_str, f"eval_cali_{cali}.png"), dpi=100)
+        fig.savefig(os.path.join(path_str, f"eval_cali_{x_label[cali]}.png"), dpi=100)
         plt.close()
 
     funcs = [np.mean, np.max]
-    desc = ['average', 'maximum']
+    desc = ['Average', 'Maximum']
     scan = np.abs(scan)
     for func, desc_str in zip(funcs, desc):
         scan_cmp = func(scan, axis=2).squeeze()
         rec_cmp = func(rec, axis=1).squeeze()
-        fig, axes = plt.subplots(nrows=1, ncols=3, figsize=(15, 5))
+        fig, axes = plt.subplots(nrows=1, ncols=3, figsize=(15, 5), sharey=True)
         for loc in range(scan.shape[0]):
             for metric_idx in range(len(scan_metrics_list)):
-                axes[loc].plot(scan_cmp[loc, :, metric_idx], label=f'{scan_metrics_list[metric_idx]}')
+                axes[loc].plot(x_label, scan_cmp[loc, :, metric_idx],
+                               linestyle=scan_metrics_style[metric_idx],
+                               label=f'{scan_metrics_list[metric_idx]}')
             for metric_idx in range(len(rec_metrics_list)):
-                axes[loc].plot(rec_cmp[:, metric_idx], label=f'{rec_metrics_list[metric_idx]}')
-            axes[loc].set_xlabel('calibration indices')
-            axes[loc].set_ylabel(f'{desc_str} error')
+                axes[loc].plot(x_label, rec_cmp[:, metric_idx],
+                               linestyle=rec_metrics_style[metric_idx],
+                               label=f'{rec_metrics_list[metric_idx]}')
+            axes[loc].set_xlabel('Calibration Ring Name')
+            axes[loc].set_xticks(range(len(x_label)))
+            axes[loc].set_xticklabels(x_label, rotation=90)
             axes[loc].set_title(f'Scan Location {table[loc][0]}')
-            axes[loc].legend(loc='upper center', bbox_to_anchor=(0.5, -0.15), ncol=2)
             axes[loc].grid()
-        plt.tight_layout()
-        fig.savefig(os.path.join(path_str, f"cali_cmp_{desc_str}.png"), dpi=100)
+        fig.text(
+            0.08,
+            0.55,
+            f"{desc_str} Error",
+            va="center",
+            ha="center",
+            rotation="vertical",
+            fontsize=12,
+       )
+        handles, labels = axes[0].get_legend_handles_labels()
+        fig.legend(handles, labels, loc='upper center', bbox_to_anchor=(0.5, -0.05), ncol=2)
+        plt.subplots_adjust(bottom=0.10, wspace=0.05)
+        fig.savefig(os.path.join(path_str, f"cali_cmp_{desc_str.lower()}.png"), dpi=100, bbox_inches="tight")
         plt.close()
 
 def main():

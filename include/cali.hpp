@@ -95,7 +95,8 @@ namespace RingMeasure {
             { 
                 measure = measure_; 
                 camera_resolution = measure.ring.dA * M_PI / 360.0f;
-                mid_height = measure.ring.h/2.0 + system.robot.table_h - system.robot.wedge_h;
+                if(system_ready)
+                    mid_height = measure.ring.h/2.0 + system.robot.table_h - system.robot.wedge_h;
                 measure_ready = true;
             }
 
@@ -105,6 +106,8 @@ namespace RingMeasure {
                 system = system_; 
                 smallest_value = system.sensor.z_oft/1.0e5  - system.sensor.mount_height;
                 system_ready = true;
+                if(measure_ready)
+                    mid_height = measure.ring.h/2.0 + system.robot.table_h - system.robot.wedge_h;
             }
 
             void setSystemCorrection(const std::array<RingMeasure::ScanCfg, static_cast<size_t>(rm::ScanLocation::NUM)> &correction)
@@ -123,6 +126,8 @@ namespace RingMeasure {
             std::array<std::array<float, axis_num>, NUM> radiusEval() const { return radius_eval; }
 
             std::array<std::array<std::array<float, 2>, axis_num>, NUM> angleEval() const { return angle_eval; }
+
+            auto getScanNum() const { return system.sensor.scan_num; }
 
             /**
              * @brief Computes global multi-scan reconstruction evaluation metrics.

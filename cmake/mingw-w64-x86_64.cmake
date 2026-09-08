@@ -23,5 +23,4 @@ set(CMAKE_FIND_ROOT_PATH_MODE_PACKAGE ONLY)
 # To build for Windows, run the following commands in the project root directory:
 # rm -rf build-win
 # cmake -S . -B build-win -G "Unix Makefiles" -DCMAKE_TOOLCHAIN_FILE="$PWD/cmake/mingw-w64-x86_64.cmake"
-# cmake --build build-win --target ring_cali -j
 # cmake --build build-win --target deploy -j

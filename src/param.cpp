@@ -75,6 +75,7 @@ namespace RingMeasure {
         param.primitive.cylinder_fit_dist_thld     = pf["cylinder_fit_dist_thld"].as<float>();
         param.primitive.cylinder_fit_normal_weight = pf["cylinder_fit_normal_weight"].as<float>();
         param.primitive.cylinder_fit_max_iter      = pf["cylinder_fit_max_iter"].as<int>();
+        param.primitive.cylinder_fit_prob          = pf["cylinder_fit_prob"].as<float>();
         param.primitive.plane_fit_dist_thld        = pf["plane_fit_dist_thld"].as<float>();
         param.primitive.plane_fit_normal_weight    = pf["plane_fit_normal_weight"].as<float>();
         param.primitive.plane_fit_max_iter         = pf["plane_fit_max_iter"].as<int>();
@@ -125,6 +126,7 @@ namespace RingMeasure {
         pf["cylinder_fit_dist_thld"]     = param.primitive.cylinder_fit_dist_thld;
         pf["cylinder_fit_normal_weight"] = param.primitive.cylinder_fit_normal_weight;
         pf["cylinder_fit_max_iter"]      = param.primitive.cylinder_fit_max_iter;
+        pf["cylinder_fit_prob"]          = param.primitive.cylinder_fit_prob;
         pf["plane_fit_dist_thld"]        = param.primitive.plane_fit_dist_thld;
         pf["plane_fit_normal_weight"]    = param.primitive.plane_fit_normal_weight;
         pf["plane_fit_max_iter"]         = param.primitive.plane_fit_max_iter;
