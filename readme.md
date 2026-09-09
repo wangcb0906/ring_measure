@@ -14,7 +14,7 @@ This projects calibrates the rings and generate the parameters, include rotation
 * g++/gcc
 * Python for visualization only.
 * [VSCode codelldb](https://github.com/vadimcn/codelldb.git) extension to enable debugging.
-* [PCL](https://github.com/pointcloudlibrary/pcl)
+* [PCL(Beta Version)](https://github.com/pointcloudlibrary/pcl)
 * [Opencv](https://github.com/opencv/opencv.git)
 * [SPDLOG](https://github.com/gabime/spdlog.git)
 * [argparse](https://github.com/p-ranav/argparse.git)
@@ -42,11 +42,16 @@ cmake --build build-win --target deploy -j
 #### To build the document
 ```
 doxygen
+cd latex
+pdflatex refman.tex
+makeindex refman.idx
+pdflatex refman.tex
+pdflatex refman.tex
 ```
 
 ### Executing program
 
-* To show help function of each applicatinon, run
+* To show help function of each application, run
 ```
 ./ring_cali
 ./ring_cali_eval
@@ -54,7 +59,7 @@ doxygen
 
 ## Help
 
-* To show help function of each applicatinon, run
+* To show help function of each application, run
 ```
 ./ring_cali -h
 ./ring_cali_eval -h
@@ -155,16 +160,6 @@ mke_btm   = 9
 da = 990
 di = 810
 h  = 90
-```
-
-## Document Generation
-```
-doxygen
-cd latex
-pdflatex refman.tex
-makeindex refman.idx
-pdflatex refman.tex
-pdflatex refman.tex
 ```
 
 ## Authors

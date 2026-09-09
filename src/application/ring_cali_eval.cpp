@@ -96,12 +96,6 @@ main (int argc, char* argv[])
     fs::path measure_root(cali_path.string() + "_cali_eval");
     CREATE_DIR(logger, measure_root);
 
-    constexpr std::array<rm::ScanLocation, static_cast<size_t>(rm::ScanLocation::NUM)> scan_locs = {
-        rm::ScanLocation::In,
-        rm::ScanLocation::Out,
-        rm::ScanLocation::Under
-    };
-
     int size = calis.size();
     // Create a 3D grid where EVERY cell is a dynamic std::vector
     boost::multi_array<rm::RingCalibration::ScanMetricsArray, 3> eval_scan(
@@ -146,7 +140,7 @@ main (int argc, char* argv[])
         cali.setLogger(logger);
         cali.setParam(param);
         // Read the bianary calibration configuration file
-        fs::path cali_cfg_bin = cali_path / "calibrations" / cali_cfg_file;
+        fs::path cali_cfg_bin = cali_path / "calibrations" / (cali_cfg_file + ".bin");
         assert(fs::exists(cali_cfg_bin) && "The binary cali config file does not exist.");
         std::ifstream in_file(cali_cfg_bin, std::ios::binary);
         std::array<RingMeasure::ScanCfg, static_cast<size_t>(rm::ScanLocation::NUM)> cfgs_read;
@@ -174,7 +168,7 @@ main (int argc, char* argv[])
             SPDLOG_LOGGER_INFO(logger, "Processing Ring {} with config {}", ring,  cali_cfg_file);
             rm::loadMeasureConfig(config_path / (ring + ".ini"), measure);
             cali.setMeasure(measure);
-            for (const auto& scan : scan_locs)
+            for (const auto& scan : rm::SCAN_LOCS)
             {
                 cali.verification(scan, ring_path, true);
                 auto loc = static_cast<size_t>(scan);

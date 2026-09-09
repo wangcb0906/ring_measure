@@ -285,7 +285,7 @@ namespace RingMeasure {
             ScanLocation scan_loc;                  ///< Current scan location
             size_t loc;                             ///< Current scan index
             
-            rm::ParamTune param;                        ///< Calibration parameters
+            rm::ParamTune param;                    ///< Calibration parameters
     
             rm::MeasureCfg measure;                 ///< Measure configuration
             rm::SystemCfg system;                   ///< System configuration

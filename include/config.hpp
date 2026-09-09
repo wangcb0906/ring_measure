@@ -20,6 +20,15 @@ namespace RingMeasure{
         NUM
     };
 
+    /**
+     * @brief Array of all scan locations.
+     */
+    constexpr std::array<ScanLocation, static_cast<size_t>(ScanLocation::NUM)> SCAN_LOCS = {
+        ScanLocation::In,
+        ScanLocation::Out,
+        ScanLocation::Under
+    };
+
     /// @brief Ellipse axis types for measurement calculations.
     enum class AxisType
     {

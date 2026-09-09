@@ -54,6 +54,27 @@
             },
             "problemMatcher": ["$gcc"],
             "detail": "Task generated to build the project via CMake."
+        },
+        {
+            "type": "shell",
+            "label": "build_measure",
+            "command": "cmake",
+            "args": [
+                "--build",
+                "build",
+                "--target",
+                "ring_measure",
+                "-j",
+            ],
+            "dependsOn": [
+                "cmake_configure"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "problemMatcher": ["$gcc"],
+            "detail": "Task generated to build the project via CMake."
         }
     ]
 }

@@ -86,6 +86,53 @@
                     "ignoreExisting": true
                 }
             ]
+        },
+
+        {
+            "name": "ring_measure_lldb",
+            "type": "lldb",
+            "request": "launch",
+            "program": "${workspaceFolder}/ring_measure",
+            "cwd": "${workspaceFolder}",
+            "args": [
+                "measure/20260326/",
+                "-c", "4_ND_20260622_4_10.ini",
+                "-b",
+                "-r", "measure/20260326/config/11.ini"
+            ],
+            "preLaunchTask": "build_measure",
+            "initCommands": [
+                "script import sys; sys.path.append('/usr/lib/python3.14/site-packages')",
+                "command script import ${workspaceFolder}/visual/parse.py",
+                "command script import ${workspaceFolder}/visual/line.py",
+                "command script import ${workspaceFolder}/visual/profile.py",
+                "command script import ${workspaceFolder}/visual/hist.py",
+                "command script import ${workspaceFolder}/visual/eval.py",
+            ]
+        },
+
+        {
+            "name": "ring_measure_gdb",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/ring_measure",
+            "cwd": "${workspaceFolder}",
+            "args": [
+                "measure/20260326/",
+                "-c", "4_ND_20260622_4_10.ini",
+                "-b",
+                "-r", "measure/20260326/config/11.ini"
+            ],
+            "preLaunchTask": "build_measure",
+            "MIMode": "gdb",
+            "miDebuggerPath": "/usr/bin/gdb",
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreExisting": true
+                }
+            ]
         }
     ]
 }

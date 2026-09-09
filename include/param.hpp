@@ -136,7 +136,7 @@ namespace RingMeasure {
         /// otherwise, the point cloud will be kept in memory for later use.
         bool memory_save = false;
         /// The leaf size for downsampling the point cloud before Euclidean segmentation.
-        /// To reduce the number of pointsa and to accelerate Euclidean segmentation.
+        /// To reduce the number of points and to accelerate Euclidean segmentation.
         float leaf_size_before_EC = 1.5f;
         /// The resampling ratio for the in and out scan in y direction, based on observation.
         float io_resampling_ratio_for_ne = 1.0f;

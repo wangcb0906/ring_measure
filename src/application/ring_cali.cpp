@@ -15,10 +15,6 @@
 #include "param.hpp"
 #include "visualization.hpp"
 
-#if defined(RING_MEASURE_CALI_ONLY) && defined(RING_MEASURE_VERIFY_ONLY)
-    #error "Cannot define both RING_MEASURE_CALI_ONLY and RING_MEASURE_VERIFY_ONLY!"
-#endif
-
 int
 main (int argc, char* argv[])
 {
@@ -31,32 +27,52 @@ main (int argc, char* argv[])
 
     argparse::ArgumentParser program("ring_cali", "0.1");
     program.add_argument("cali")
-           .help("Folder to calibrate or a single measure configuration file.");
+           .help("Folder to calibrate a folder or a single measure configuration file.");
+
+    program.add_argument("-m", "--mode")
+           .default_value(3)
+           .nargs(1)
+           .scan<'i', int>()
+           .choices(0, 1, 2, 3)
+           .help("Mode of operation.\n"
+                 "Lower bit for calibration, higher bit for verification.\n"
+                 "0: sanity check only, 1: calibration only,\n"
+                 "2: verification only, 3: both calibration and verification.");
+
+    program.add_argument("-b", "--binary")
+           .help("If the binary correction, use it to apply the correction.\n"
+                 "The defaut value is false.\n")
+           .default_value(false)
+           .nargs('?')
+           .implicit_value(true);
 
     program.add_argument("-p", "--parameter")
-           .help("Path to the parameter file.\n"
-                 "If not specified, the default parameters will be used, the out_path will be set to 'result'.\n"
-                 "If specified, the parameters will be loaded from the file, \nand the out_path will be set to folder of the same name."
+           .help("Path to the parameter file. "
+                 "If not specified, the default parameters will be used,\n"
+                 "the out_path will be set to 'result'.\n"
+                 "If specified, the parameters will be loaded from the file,\n"
+                 "and the out_path will be set to folder of the same name.\n"
                  );
 
     program.add_argument("-o", "--output")
            .help("Path to the output directory.\n"
                  "If not specified, the output will be set to 'result' in the root folder.\n"
                  "or in accordance with the value of 'parameter'.\n"
-                 "If specified, the output will be overwritten."
+                 "If specified, the output will be overwritten.\n"
                  );
 
     program.add_argument("-r", "--ring-cfg")
-       .help("Specific ring to calibrate, otherwise, \n"
+       .help("Specific ring to calibrate, otherwise,\n"
              "all rings in the folder will be processed.\n"
              "If -r specified, the parameters will be dumped to the log file.\n"
-             "Otherwise, the parameters will be dumped to the parameters.ini file in the root folder.\n");
+             "Otherwise, the parameters will be dumped to  file in the root folder.\n");
 
     program.add_argument("-s", "--suffix")
+           .default_value(std::string(""))
            .help("If -r specified, add the suffix to the log_file name.\n"
-                 "Otherwise, no effect\n"
-                 "Usually, used to distinguish different runs of different parameters on the same ring.\n")
-           .default_value(std::string(""));
+                 "Otherwise, no effect.\n"
+                 "Usually, used to distinguish different runs on the same ring.")
+           .nargs(1);
 
     try {
         program.parse_args(argc, argv);
@@ -134,6 +150,11 @@ main (int argc, char* argv[])
 
     int size = calis.size();
     auto start = std::chrono::high_resolution_clock::now();
+
+    auto mode = program.get<int>("--mode");
+    bool cali_enabled = (mode & 1) != 0;
+    bool verify_enabled = (mode & 2) != 0;
+
     #pragma omp parallel for schedule(dynamic)
     for (int cali_idx = 0; cali_idx < size; ++cali_idx) {
         const auto& measure_cfg_file = calis[cali_idx];
@@ -144,10 +165,10 @@ main (int argc, char* argv[])
         }
         rm::RingCalibration cali;
         fs::path ring = measure_cfg_file.filename();
-        if(single_cfg_file){
+        if(single_cfg_file && !program.get<std::string>("--suffix").empty()){
             ring = ring.stem().string() + "_" + program.get<std::string>("--suffix") + ring.extension().string();
         }
-        auto log_file = log_path / ring.replace_extension(".log");
+        auto log_file = log_path / (ring.stem().string() + ".log");
         auto logger=spdlog::basic_logger_mt(ring.string(), log_file.string(), true);
         logger->set_level(spdlog::level::trace);
         logger->set_pattern("[%Y-%m-%d %H:%M:%S] [%l] [%s:%#] %v");
@@ -163,20 +184,21 @@ main (int argc, char* argv[])
         rm::MeasureCfg measure;
         rm::loadMeasureConfig(measure_cfg_file, measure);
         SPDLOG_LOGGER_INFO(logger, "Loaded configuration from {}.", measure_cfg_file);
-        #ifdef RING_MEASURE_VERIFY_ONLY
-        assert(fs::exists(cali_path/ring.stem()) && "The binary configuration file does not exist.");
-        auto binary = cali_path/ring.stem();
-        std::ifstream in_file(binary, std::ios::binary);
-        std::array<rm::ScanCfg, static_cast<size_t>(rm::ScanLocation::NUM)> &
-            cfgs_read = sys_.robot.scans;
-        in_file.read(
-                reinterpret_cast<char*>(cfgs_read.data()),
-                cfgs_read.size() * sizeof(rm::ScanCfg)
-                );
-        in_file.close();
-        SPDLOG_LOGGER_INFO(logger, "Loaded binary configuration from {}.", binary);
-        #endif
 
+        if(program.get<bool>("--binary") && !cali_enabled && verify_enabled)
+        {
+            assert(fs::exists(cali_path/ring.stem()) && "The binary configuration file does not exist.");
+            auto binary = cali_path / (ring.stem().string() + ".bin");
+            std::ifstream in_file(binary, std::ios::binary);
+            std::array<rm::ScanCfg, static_cast<size_t>(rm::ScanLocation::NUM)> &
+                cfgs_read = sys_.robot.scans;
+            in_file.read(
+                    reinterpret_cast<char*>(cfgs_read.data()),
+                    cfgs_read.size() * sizeof(rm::ScanCfg)
+                    );
+            in_file.close();
+            SPDLOG_LOGGER_INFO(logger, "Loaded binary configuration from {}.", binary);
+        }
         cali.setSystem(sys_);
         cali.setMeasure(measure);
     
@@ -184,29 +206,13 @@ main (int argc, char* argv[])
         fs::path path = out_root / (measure.ring.type + "_" + ring.stem().string());
         CREATE_DIR(logger, path);
 
-        #ifndef RING_MEASURE_VERIFY_ONLY
-            cali.calibration(rm::ScanLocation::Out, path);
-        #endif
-
-        #ifndef RING_MEASURE_CALI_ONLY
-            cali.verification(rm::ScanLocation::Out, path);
-        #endif
-
-        #ifndef RING_MEASURE_VERIFY_ONLY
-            cali.calibration(rm::ScanLocation::In, path);
-        #endif
-
-        #ifndef RING_MEASURE_CALI_ONLY
-            cali.verification(rm::ScanLocation::In, path);
-        #endif
-
-        #ifndef RING_MEASURE_VERIFY_ONLY
-            cali.calibration(rm::ScanLocation::Under, path);
-        #endif
-
-        #ifndef RING_MEASURE_CALI_ONLY
-            cali.verification(rm::ScanLocation::Under, path);
-        #endif
+        for(const auto& scan : rm::SCAN_LOCS)
+        {
+            if(cali_enabled)
+                cali.calibration(scan, path);
+            if(verify_enabled)
+                cali.verification(scan, path);
+        }
 
         // dumpConfig("stdout", cali.getSystem());
 
@@ -214,13 +220,14 @@ main (int argc, char* argv[])
 
         // Dump the new configuratrion to a ini file.
         // Do not dump the configuration in verifying only mode.
-        #ifndef RING_MEASURE_VERIFY_ONLY
-            fs::path new_ini = (cali_path / ("system_" + ring.string())).replace_extension(".ini");
+        if(cali_enabled)
+        {
+            fs::path new_ini = cali_path / ring;
             SPDLOG_LOGGER_INFO(logger, "Dumping the new configuration to {}", new_ini);
             auto sys_cali = cali.getSystem();
             rm::dumpConfig(new_ini, sys_cali);
             auto calibrated = cali.getSystem().robot.scans;
-            fs::path binary_ini = cali_path / ring.stem();
+            fs::path binary_ini = cali_path / (ring.stem().string() + ".bin");
             // Open file in output + binary mode
             SPDLOG_LOGGER_INFO(logger, "Dumping the new binary configuration to {}", binary_ini);
             std::ofstream out_file(binary_ini, std::ios::binary);
@@ -230,7 +237,7 @@ main (int argc, char* argv[])
                 calibrated.size() * sizeof(rm::ScanCfg)
             );
             out_file.close();
-        #endif
+        }
 
         // #ifndef RING_MEASURE_CALI_ONLY
         // // write the reconstructed point clouds to PLY files for visualization
@@ -342,7 +349,7 @@ main (int argc, char* argv[])
 
         auto end_time = std::chrono::high_resolution_clock::now();
         auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
-        SPDLOG_LOGGER_WARN(logger, "Total execution time: {} ms", duration.count());
+        SPDLOG_LOGGER_INFO(logger, "Total execution time: {} ms", duration.count());
         SPDLOG_LOGGER_INFO(logger, "Finished processing the scan from {}.\n\n\n", measure_cfg_file.stem());
 
         logger->flush();
