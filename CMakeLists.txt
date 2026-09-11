@@ -3,7 +3,7 @@ project(RingMeasurement)
 
 set(CALI ring_cali)
 set(EVALUATION ring_cali_eval)
-set(MEASURE ring_measure)
+set(MERGE merge)
 set(CORE_LIB core_shared)
 
 set(CMAKE_CXX_STANDARD 17)
@@ -21,7 +21,6 @@ endif()
 # ------------------------------------------------------------
 # Dependencies
 # ------------------------------------------------------------
-
 find_package(spdlog REQUIRED)
 find_package(OpenCV 5 REQUIRED COMPONENTS core imgproc)
 find_package(TIFF REQUIRED)
@@ -96,9 +95,14 @@ target_link_libraries(${CALI} PRIVATE ${CORE_LIB})
 add_executable(${EVALUATION} ${APP_DIR}/ring_cali_eval.cpp)
 target_link_libraries(${EVALUATION} PRIVATE ${CORE_LIB})
 
-add_executable(${MEASURE} ${APP_DIR}/ring_measure.cpp)
-target_link_libraries(${MEASURE} PRIVATE ${CORE_LIB})
-
+if(UNIX AND NOT APPLE)
+    find_package(OpenMP REQUIRED)
+    pkg_check_modules(ImageMagick REQUIRED Magick++)
+    add_executable(${MERGE} ${APP_DIR}/merge.cpp)
+    target_include_directories(${MERGE} PRIVATE ${ImageMagick_INCLUDE_DIRS})
+    target_link_libraries(${MERGE} PRIVATE ${ImageMagick_LIBRARIES} OpenMP::OpenMP_CXX)
+    target_compile_options(merge PRIVATE ${ImageMagick_CFLAGS_OTHER})
+endif()
 
 # ------------------------------------------------------------
 # Deployment on Windows
@@ -117,7 +121,7 @@ if(MINGW)
             -P "${CMAKE_SOURCE_DIR}/cmake/deploy.cmake"
         DEPENDS
             ${CALI}
-            ${MEASURE}
+            ${EVALUATION}
         COMMENT "Collecting runtime DLL dependencies..."
     )
 endif()
@@ -129,9 +133,9 @@ endif()
 # cmake --build build -j --target ring_cali --clean-first
 # To start a test
 # cmake --build build -j --target ring_cali && ./ring_cali cali/20260622 -o auto -r 4_ND_20260622_4_19.ini
-# cmake --build build -j --target ring_cali_eval  && ./ring_cali_eval cali/20260622 -i auto
-# python visual/eval_bin.py ./cali/20260622/result_cali_eval/
-# ./ring_measure measure/20260326/ -c 4_ND_20260622_4_10.ini -b -r measure/20260326/config/11.ini
+# cmake --build build -j --target ring_cali_eval  && ./ring_cali_eval cali/20260622/auto auto_cali_eval -bm
+# python visual/eval_bin.py ./cali/20260622/auto_cali_eval/
+# ./ring_cali_eval cali/20260622/auto eval -e measure/20260326/ -b -t measure/20260326/config/11.ini
+# python visual/eval_bin.py measure/20260326/eval/ cali/20260622/auto
 # To check the quality of a construction, note that the scans are not well aligned.
-# magick composite -blend 50% result/GR_4_ND_20260622_4_19/in_test_denoise/line_13_in_recon.png \
-#     result/GR_4_ND_20260622_4_19/out_test_denoise/line_11_out_recon.png output.png
+# ./merge cali/20260622/auto/GR_4_ND_20260622_4_19/In_veri_denoise/ \cali/20260622/auto/GR_4_ND_20260622_4_19/Out_veri_denoise/ cali/20260622/auto/GR_4_ND_20260622_4_19/combined 2

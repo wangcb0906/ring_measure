@@ -289,4 +289,16 @@ namespace RingMeasure{
      */
     void dumpConfig(const std::filesystem::path& sys_cfg,
                     const struct SystemCfg& sys);
+    /**
+     * @brief Dumps correction parameters to an INI file.
+     * If the file is set to "stdout", the parameters will be printed to the console
+     * instead of being written to a file.
+     * 
+     * @param correction_cfg Path to the target output configuration file.
+     * @param scans Array of scan configurations.
+     * @param mode File open mode.
+     */
+    void dumpCorrection(const std::filesystem::path& correction_cfg,
+                        const std::array<ScanCfg, NUM>& scans,
+                        std::ios_base::openmode mode = std::ios_base::out);
 }

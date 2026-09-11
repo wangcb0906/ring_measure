@@ -139,4 +139,32 @@ namespace RingMeasure {
         sys.sensor.unit = system_ini["Sensor"]["unit"].as<std::string>();
         sys.sensor.mount_height = system_ini["Sensor"]["mount"].as<float>();
     }
+
+    void dumpCorrection(const std::filesystem::path& correction_cfg,
+                        const std::array<ScanCfg, NUM>& scans,
+                        std::ios_base::openmode mode)
+    {
+        ini::IniFile correction_ini(correction_cfg.string());
+        correction_ini["Robot"]["angleI"] = scans[I].view_angle;
+        correction_ini["Robot"]["corrAngleI"] = scans[I].angle_corr;
+        correction_ini["Robot"]["corrXI"] = scans[I].pos_corr.x;
+        correction_ini["Robot"]["corrYI"] = scans[I].pos_corr.y;
+      
+        correction_ini["Robot"]["angleA"] = scans[O].view_angle;
+        correction_ini["Robot"]["corrAngleA"] = scans[O].angle_corr;
+        correction_ini["Robot"]["corrXA"] = scans[O].pos_corr.x;
+        correction_ini["Robot"]["corrYA"] = scans[O].pos_corr.y;
+      
+        correction_ini["Robot"]["angleU"] = scans[U].view_angle;
+        correction_ini["Robot"]["corrAngleU"] = scans[U].angle_corr;
+        correction_ini["Robot"]["corrXU"] = scans[U].pos_corr.x;
+        correction_ini["Robot"]["corrYU"] = scans[U].pos_corr.y;
+
+        if(correction_cfg.string() == "stdout"){
+            correction_ini.encode(std::cout);
+            return;
+        }
+        std::ofstream outFile(correction_cfg, mode);
+        correction_ini.encode(outFile);
+    }
 }

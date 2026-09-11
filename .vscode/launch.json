@@ -96,9 +96,9 @@
             "cwd": "${workspaceFolder}",
             "args": [
                 "measure/20260326/",
-                "-c", "4_ND_20260622_4_10.ini",
+                "-c", "cali/20260622/auto/calibrations/",
                 "-b",
-                "-r", "measure/20260326/config/11.ini"
+                "-t", "measure/20260326/config/11.ini"
             ],
             "preLaunchTask": "build_measure",
             "initCommands": [

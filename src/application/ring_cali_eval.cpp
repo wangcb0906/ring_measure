@@ -36,22 +36,57 @@ main (int argc, char* argv[])
     logger->set_pattern("[%Y-%m-%d %H:%M:%S] [%l] [%s:%#] %v");
 
     argparse::ArgumentParser program("ring_cali_eval", "0.1");
-    program.add_argument("cali")
-           .help("Folder to calibrate or a single measure configuration file.");
+    program.add_argument("input")
+           .help("Path to the calibrations.\n");
 
-    program.add_argument("-i", "--input")
-           .help("Path to the calibration results")
-           .default_value(std::string("result"))
-           .help("Path to the calibration results. If not specified, the default is 'result'.\n"
-                 "Always read the parameters from the file of the same name.\n");
-
-    program.add_argument("-c", "--calibration")
-           .help("Specific calibration to evaluate, otherwise, \n"
-                 "all calibrations in the folder will be processed.\n");
+    program.add_argument("output")
+           .help("Path to the output directory.\n");
 
     program.add_argument("-e", "--evaluation")
-           .help("Specific ring to evaluate, otherwise, \n"
-                 "all rings in the folder will be processed.\n");
+           .help(
+                 "Path to the rings to evaluate.\n"
+                 "The defaut value is set to $input.\n"
+                 )
+           .nargs(1);
+
+    program.add_argument("-b", "--binary")
+           .help("If it is specified, use binary format to apply the correction.\n"
+                 "The defaut value is false.\n"
+                 )
+           .default_value(false)
+           .implicit_value(true);
+
+    program.add_argument("-p", "--parameter")
+           .help("Path to the parameter file.\n"
+                 "If not specified, use the parameters of the same name of the calibration.\n"
+                 "If specified, the parameters will be loaded from the file.\n"
+                 "The parameters will be dumped to log.\n"
+                 );
+
+    program.add_argument("-t", "--test-ring")
+           .help(
+                 "If specified, only the test ring will be processed.\n"
+                 "Otherwise, all rings in the folder will be processed.\n"
+                 "The test ring should be specified as a file name, e.g., 'ring_1.ini'.\n"
+                 "The test ring should be located in the 'config' folder.\n"
+                );
+
+    program.add_argument("-c", "--calibration")
+            .help("Specific calibration to evaluate, otherwise,\n"
+                  "all calibrations in the folder will be processed.\n");
+
+    program.add_argument("-m", "--minus-wedge")
+           .help("If it is specified, the height of the table will be subtracted by the height of the wedge.\n"
+                 "The defaut value is false.\n"
+                 )
+           .default_value(false)
+           .implicit_value(true);
+
+    program.add_argument("-s", "--suffix")
+           .help("Add the suffix to the log_file and output file names.\n"
+                 "Otherwise, no effect.\n"
+                 "Default value is empty string.")
+           .nargs(1);
 
     try {
         program.parse_args(argc, argv);
@@ -63,53 +98,105 @@ main (int argc, char* argv[])
         return 1;
     }
 
-    fs::path root = program.get<std::string>("cali");
+    // fs::path root = program.get<std::string>("input");
 
-    auto cali_result = program.get<std::string>("--input");
-    fs::path cali_path;
-    fs::path paramters;
-    cali_path = root / cali_result;
-    paramters = root / (cali_result + ".ini");
-
-    auto single_cali_file = program.present<std::string>("--calibration");
-    auto single_eval_file = program.present<std::string>("--evaluation");
-
+    // Process the calibration configurations.
+    fs::path cali_path = program.get<std::string>("input");;
+    fs::path paramters = cali_path.string() + ".ini";
+    if(auto aux = program.present<std::string>("--parameter")) {
+        paramters = aux.value();
+    }
     rm::ParamTune param;
     rm::loadParam(paramters, param);
-    SPDLOG_LOGGER_INFO(logger, "Loaded calibration parameters from {}.", paramters);
-    fs::path config_path = root / "config";
+    SPDLOG_LOGGER_INFO(logger, "Loaded parameters from {}.", paramters);
 
-    std::vector<std::string> calis;
-    if (fs::exists(config_path) && fs::is_directory(config_path)) {
+    // Process the calibration configurations.
+    fs::path cali_config_path = cali_path / "calibrations";
+    std::vector<fs::path> calis;
+    if (fs::exists(cali_config_path) && fs::is_directory(cali_config_path)) {
         // Populate vector directly using directory iterator range
-        SPDLOG_LOGGER_INFO(logger, "Processing the measure configuration folder: {}", config_path);
-        for (auto const& entry : fs::directory_iterator(config_path)) {
-            calis.push_back(entry.path().stem().string());
+        SPDLOG_LOGGER_INFO(logger, "Processing the calibration configuration folder: {}", cali_config_path);
+        for (auto const& entry : fs::directory_iterator(cali_config_path)) {
+            if (entry.path().extension() == ".ini") {
+                calis.push_back(entry.path());
+            }
         }
         std::sort(calis.begin(), calis.end());
     } else {
-        SPDLOG_LOGGER_ERROR(logger, "Directory {} does not exist.", config_path);
+        SPDLOG_LOGGER_ERROR(logger, "Directory {} does not exist.", cali_config_path);
         exit(EXIT_FAILURE);
     }
 
-    auto system_cfg_file = root / "system.ini";
-    fs::path measure_root(cali_path.string() + "_cali_eval");
+    // Remove other files if single calibration is specified
+    auto single_cali = program.present<std::string>("--calibration");
+    if(single_cali) {
+        calis.erase(
+            std::remove_if(calis.begin(), calis.end(),
+                [&single_cali](const fs::path& p) {
+                    return p.filename() != fs::path(single_cali.value()).filename();
+                }
+            ),
+            calis.end()
+        );
+    }
+
+    // Process the measurement configurations.
+    fs::path eval_path = cali_path.parent_path();
+    if(auto aux = program.present<std::string>("--evaluation"))
+    {
+        eval_path = aux.value();
+    }
+    fs::path eval_config_path = eval_path / "config";
+    std::vector<fs::path> evals;
+    if (fs::exists(eval_config_path) && fs::is_directory(eval_config_path)) {
+        // Populate vector directly using directory iterator range
+        SPDLOG_LOGGER_INFO(logger, "Processing the measure configuration folder: {}", eval_config_path);
+        for (auto const& entry : fs::directory_iterator(eval_config_path)) {
+            if (entry.path().extension() == ".ini") {
+                evals.push_back(entry.path());
+            }
+        }
+        std::sort(evals.begin(), evals.end());
+    } else {
+        SPDLOG_LOGGER_ERROR(logger, "Directory {} does not exist.", eval_config_path);
+        exit(EXIT_FAILURE);
+    }
+
+    // Remove other files if single evaluation is specified.
+    auto single_eval = program.present<std::string>("--test-ring");
+    if (single_eval)
+    {
+        evals.erase(
+            std::remove_if(evals.begin(), evals.end(),
+                [&single_eval](const fs::path& p){ 
+                    return p.filename() != fs::path(single_eval.value()).filename(); 
+                }
+            ),
+            evals.end()
+        );
+    }
+
+    auto system_cfg_file = eval_path / "system.ini"; 
+    fs::path measure_root(eval_path.string() + "_cali_eval");
+    auto out = program.present<std::string>("output");
+    if(out) {
+        measure_root = eval_path / out.value();
+    }
     CREATE_DIR(logger, measure_root);
 
-    int size = calis.size();
     // Create a 3D grid where EVERY cell is a dynamic std::vector
     boost::multi_array<rm::RingCalibration::ScanMetricsArray, 3> eval_scan(
         boost::extents[static_cast<size_t>(rm::ScanLocation::NUM)]
-        [size][size]
+        [calis.size()][evals.size()]
     );
     boost::multi_array<rm::RingCalibration::ReconMetricsArray, 2> eval_recon(
-        boost::extents[size][calis.size()]
+        boost::extents[calis.size()][evals.size()]
     );
 
-    rm::SystemCfg sys;
-    rm::loadSystemConfig(system_cfg_file, sys);
+    rm::SystemCfg sys_;
+    rm::loadSystemConfig(system_cfg_file, sys_);
     SPDLOG_LOGGER_INFO(logger, "Loaded configuration from {}.", system_cfg_file);
-    rm::MeasureCfg measure;
+    rm::RingCfg ring_profile;
 
     thread_local std::shared_ptr<spdlog::logger> thread_active_logger = nullptr;
     // Register the PCL callback ONCE globally before the loop
@@ -120,64 +207,84 @@ main (int argc, char* argv[])
             handler(record); // Process the PCL log record with the correct logger and metadata
         }
     });
+
+    bool binary = program.get<bool>("--binary");
     auto start = std::chrono::high_resolution_clock::now();
     // Add the OpenMP directive here!
     #pragma omp parallel for schedule(dynamic)
-    for (size_t cali_idx = 0; cali_idx < size; ++cali_idx) {
-        const auto& cali_cfg_file = calis[cali_idx];
-        if(single_cali_file && cali_cfg_file != single_cali_file.value()) {
-            continue;
-        }
-        rm::RingCalibration cali;
-        cali.setSystem(sys);
-        auto logger=spdlog::basic_logger_mt("MeasureCali_" + std::to_string(cali_idx), 
-            (measure_root / ("[" + fmt::format("{:02}", cali_idx) + "]=" + cali_cfg_file + ".log")).string(), true);
-        logger->set_level(spdlog::level::trace);
-        logger->set_pattern("[%Y-%m-%d %H:%M:%S] [%l] [%s:%#] %v");
-        // wrapper the PCl logger with time and level information
-        // Bind this thread's execution context to this specific logger
-        thread_active_logger = logger;
-        cali.setLogger(logger);
-        cali.setParam(param);
-        // Read the bianary calibration configuration file
-        fs::path cali_cfg_bin = cali_path / "calibrations" / (cali_cfg_file + ".bin");
-        assert(fs::exists(cali_cfg_bin) && "The binary cali config file does not exist.");
-        std::ifstream in_file(cali_cfg_bin, std::ios::binary);
-        std::array<RingMeasure::ScanCfg, static_cast<size_t>(rm::ScanLocation::NUM)> cfgs_read;
-        in_file.read(
-                reinterpret_cast<char*>(cfgs_read.data()),
-                cfgs_read.size() * sizeof(RingMeasure::ScanCfg)
-                );
-        in_file.close();
-        cali.setSystemCorrection(cfgs_read);
+    for (size_t cali_idx = 0; cali_idx < calis.size(); ++cali_idx) {
+        
+        SPDLOG_LOGGER_INFO(logger, "Thread {} is processing calibration {}.", omp_get_thread_num(), calis[cali_idx]);
 
-        fs::path root_out_path = measure_root / cali_cfg_file;
-        CREATE_DIR(logger, root_out_path);
+        auto& cali_cfg_file = calis[cali_idx];
+        std::array<RingMeasure::ScanCfg, rm::NUM> cfgs_read;
+        if(binary)
+        {
+            auto binary_ini = cali_cfg_file.replace_extension(".bin");
+            std::ifstream in_file(binary_ini, std::ios::binary);
+            in_file.read(
+                    reinterpret_cast<char*>(cfgs_read.data()),
+                    cfgs_read.size() * sizeof(rm::ScanCfg)
+                    );
+            in_file.close();
+            SPDLOG_LOGGER_INFO(logger, "Loaded binary correction from {}.", binary_ini);
+        }
+          else
+        {
+            auto ascii_ini = cali_cfg_file.replace_extension(".ini");;
+            SPDLOG_LOGGER_INFO(logger, "Loaded ASCII correction from {}.", ascii_ini);
+            rm::SystemCfg __sys;
+            rm::loadSystemConfig(ascii_ini, __sys);
+            cfgs_read = __sys.robot.scans;
+        }
+
+        fs::path out_root_path = measure_root / cali_cfg_file.stem();
+        CREATE_DIR(logger, out_root_path);
 
         auto start_time = std::chrono::high_resolution_clock::now();
         // Start to evaluate the calibration results
-
-        for (size_t eval_idx = 0; eval_idx < size; ++eval_idx)
+        for (size_t eval_idx = 0; eval_idx < evals.size(); ++eval_idx)
         {
-            const auto& ring = calis[eval_idx];
-            if(single_eval_file && ring != single_eval_file.value()) {
-                continue;
+            SPDLOG_LOGGER_INFO(logger, 
+                "Thread {} is processing evaluation {} with config {}.",
+                 omp_get_thread_num(), evals[eval_idx], cali_cfg_file
+            );
+            const auto& measure_cfg_file = evals[eval_idx];
+            rm::RingCalibration cali;
+            fs::path ring = measure_cfg_file.filename();
+            if(auto suffix=program.present<std::string>("--suffix")){
+                ring = ring.stem().string() + "_" + suffix.value() + ring.extension().string();
             }
-            fs::path ring_path = root_out_path / ring;
-            CREATE_DIR(logger, ring_path);
-            SPDLOG_LOGGER_INFO(logger, "Processing Ring {} with config {}", ring,  cali_cfg_file);
-            rm::loadMeasureConfig(config_path / (ring + ".ini"), measure);
+            std::string log_name = cali_cfg_file.stem().string() + "_" + ring.stem().string() + ".log";
+            auto logger=spdlog::basic_logger_mt(log_name, (out_root_path / "logs" / log_name).string(), true);
+            logger->set_level(spdlog::level::trace);
+            logger->set_pattern("[%Y-%m-%d %H:%M:%S] [%l] [%s:%#] %v");
+            // wrapper the PCl logger with time and level information
+            // Bind this thread's execution context to this specific logger
+            thread_active_logger = logger;
+            cali.setLogger(logger);
+            cali.setParam(param);
+            cali.setSystem(sys_);
+            cali.setSystemCorrection(cfgs_read);
+
+            rm::MeasureCfg measure;
+            rm::loadMeasureConfig(measure_cfg_file, measure);
             cali.setMeasure(measure);
+            ring_profile = measure.ring;
+
+            // Specify the path to the file system.
+            fs::path path = out_root_path / ring.stem().string();
+            CREATE_DIR(logger, path);
             for (const auto& scan : rm::SCAN_LOCS)
             {
-                cali.verification(scan, ring_path, true);
+                cali.verification(scan, path, true);
                 auto loc = static_cast<size_t>(scan);
                 eval_scan[loc][cali_idx][eval_idx] = cali.scanEval();
-                if(ring.find("_3_01") != std::string::npos)
+                if(ring.string().find("_3_01") != std::string::npos)
                 {
                     eval_scan[loc][cali_idx][eval_idx][static_cast<size_t>(rm::RingCalibration::ScanMetrics::H_PLANE_FIT)] -= 10;
                 }
-                if(cali_cfg_file.find("_3_01") != std::string::npos)
+                if(cali_cfg_file.string().find("_3_01") != std::string::npos)
                 {   
                     eval_scan[loc][cali_idx][eval_idx][static_cast<size_t>(rm::RingCalibration::ScanMetrics::H_PLANE_FIT)] += 10;
                 }
@@ -187,10 +294,8 @@ main (int argc, char* argv[])
         
         auto end_time = std::chrono::high_resolution_clock::now();
         auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
-        SPDLOG_LOGGER_INFO(logger, "Thread {} has finished processing the evaluation {}.\n\n\n", omp_get_thread_num(), cali_cfg_file);
+        SPDLOG_LOGGER_INFO(logger, "Thread {} has finished processing the evaluation {}.", omp_get_thread_num(), cali_cfg_file);
         SPDLOG_LOGGER_INFO(logger, "Total execution time: {} ms", duration.count());
-        SPDLOG_LOGGER_INFO(spdlog::default_logger(), "Thread {:2d} has finished processing the evaluation {}.", omp_get_thread_num(), cali_cfg_file);
-        SPDLOG_LOGGER_INFO(spdlog::default_logger(), "Total execution time: {} ms", duration.count());
     }
 
     auto end = std::chrono::high_resolution_clock::now();
@@ -198,10 +303,14 @@ main (int argc, char* argv[])
     SPDLOG_LOGGER_INFO(spdlog::default_logger(), "Total execution time for all evaluations: {} ms", total_duration.count());
 
     std::string path_str = measure_root.string();
-    float da = measure.ring.dA/2;
-    float di = measure.ring.dI/2;
-    float h = measure.ring.h;
-    float table_h = sys.robot.table_h - sys.robot.wedge_h;
+    float da = ring_profile.dA/2;
+    float di = ring_profile.dI/2;
+    float h = ring_profile.h;
+    float table_h = sys_.robot.table_h;
+    if(program.get<bool>("minus-wedge"))
+    {
+        table_h -= sys_.robot.wedge_h;
+    } 
     float metadata[4] = {da, di, h, table_h};
     // /py eval.plot_eval($da, $di, $h, $table_h)
 
@@ -235,7 +344,7 @@ main (int argc, char* argv[])
         eval_recon.num_elements() * sizeof(rm::RingCalibration::ReconMetricsArray)
     );
 
-    SPDLOG_LOGGER_INFO(spdlog::default_logger(), "Finished processing the measure configuration folder: {}", config_path);
+    SPDLOG_LOGGER_INFO(spdlog::default_logger(), "Finished processing the measure configuration folder: {}", eval_path);
 
     //     // write the reconstructed point clouds to PLY files for visualization
     //     *rec_out += *rec_in;

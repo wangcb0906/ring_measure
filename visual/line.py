@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import parse
 
-def plot_line(idx, show):
+def plot_line(idx, show, ra, ri, h, table_h):
     frame = lldb.debugger.GetSelectedTarget().GetProcess().GetSelectedThread().GetSelectedFrame()
     if not frame.IsValid():
         print("DEBUG ERROR: Invalid stack frame!")
@@ -42,12 +42,11 @@ def plot_line(idx, show):
         "Under": "red"
     }
 
-    # Determine y-limits based on your C++ conditional logic
-    x_lower = -505.0
-    x_upper = -395.0
-    y_lower = (878.0 if "Under" in scan_loc else 968.0)
-    y_upper = (886.0 if "Under" in scan_loc else 976.0) # 976.0
-
+    offset = 10.0
+    x_lower = -ra - offset
+    x_upper = -ri + offset
+    y_lower = (table_h - offset) if "Under" in scan_loc else (table_h + h - offset)
+    y_upper = (table_h + h + offset) if "Under" in scan_loc else (table_h + h + offset)
     title = f"{scan_loc} line {idx} reconstruction"
 
     plt.figure()
@@ -56,7 +55,7 @@ def plot_line(idx, show):
     plt.xlim([x_lower, x_upper])
     plt.ylim([y_lower, y_upper])
     plt.grid(True)
-    file_name = f"line_{idx}_{scan_loc}_recon.png"
+    file_name = f"line_{int(idx):03d}_{scan_loc}_recon.png"
     plt.savefig(os.path.join(path_str, file_name), dpi=300)
     plt.close()
     gc.collect()

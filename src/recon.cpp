@@ -109,13 +109,18 @@ void RingMeasure::RingCalibration::reconstruct(const fs::path& path_)
         // Add the line cloud to the final reconstruction
         *raw_recs[IDX] += *line_cloud;
 
-        // /py line.plot_line($idx, $show)
+        // /py line.plot_line($idx, $show, $ra, $ri, $h, $table_h)
         const int show = 0; // Set show = 1 to plot the interactive one
         // Convert the points to pcl point cloud
         const std::string path = path_.string();
-        if( (scan_loc == RingMeasure::ScanLocation::Under)
-            && phase_type == RingMeasure::PhaseType::VERI){
-            int a = 0; // placeholder
+        if( 
+            // (scan_loc == RingMeasure::ScanLocation::Under) &&
+            phase_type == RingMeasure::PhaseType::VERI){
+            float ra = measure.ring.dA/2;
+            float ri = measure.ring.dI/2;
+            float h = measure.ring.h;
+            float table_h = system.robot.table_h - system.robot.wedge_h;
+            auto aux = path;
             // SPDLOG_LOGGER_INFO(spdlog::default_logger(), "Drawing scan line {} : {:3d} with {} valid points.", scanLocationToString(scan_loc), idx, points.size());
         }
     }

@@ -45,12 +45,17 @@ def load_recon_binary(filename):
     return [metadata_arr, payload]
 
 
-def plot_eval(path_str, recon_file, scan_file):
+def plot_eval(path_cali, path_eval, recon_file, scan_file):
 
-    root = os.path.dirname(os.path.normpath(path_str))
-    config = os.path.join(root, "config")
-    x_label = sorted(os.listdir(config))
-    x_label = [x.removesuffix(".ini")[-4:] for x in x_label]
+    cali_root = os.path.dirname(os.path.normpath(path_cali))
+    cali_config = os.path.join(cali_root, "config")
+    cali_label = sorted(os.listdir(cali_config))
+    cali_label = [x.removesuffix(".ini")[-4:] if len(x.removesuffix(".ini")) > 4 else x.removesuffix(".ini") for x in cali_label]
+
+    eval_root = os.path.dirname(os.path.normpath(path_eval))
+    eval_config = os.path.join(eval_root, "config")
+    eval_label = sorted(os.listdir(eval_config))
+    eval_label = [x.removesuffix(".ini")[-4:] if len(x.removesuffix(".ini")) > 4 else x.removesuffix(".ini") for x in eval_label]
 
     metadata_arr1, rec = load_recon_binary(recon_file)
     metadata_arr2, scan = load_scan_binary(scan_file)
@@ -107,58 +112,58 @@ def plot_eval(path_str, recon_file, scan_file):
    
     lines_per_plot = 3
     for cali in range(scan.shape[1]):
-        scan_cali = scan[:, cali, :, :].squeeze()
-        rec_cali  = rec[cali, :, :].squeeze()
+        scan_cali = scan[:, cali, :, :]
+        rec_cali  = rec[cali, :, :]
         fig, axes = plt.subplots(nrows=3, ncols=3, figsize=(15, 15))
         for loc in range(scan.shape[0]):
-            scan_loc = scan_cali[loc, :, :].squeeze()
+            scan_loc = scan_cali[loc, :, :]
             for metric_idx in range(len(scan_metrics_list)):
                col_num = metric_idx // lines_per_plot
                ax = axes[loc][col_num]
                ax.set_title(f'Scan Location {table[loc][0]}')
-               ax.plot(x_label, scan_loc[:, metric_idx], 
+               ax.plot(eval_label, scan_loc[:, metric_idx], 
                     label=f'{scan_metrics_list[metric_idx]}',
                     linestyle=scan_metrics_style[metric_idx])
-               ax.set_xticks(range(len(x_label)))
-               ax.set_xticklabels(x_label, rotation=90)
+               ax.set_xticks(range(len(eval_label)))
+               ax.set_xticklabels(eval_label, rotation=90)
                ax.set_xlabel('Evaluation Ring Name')
                ax.set_ylabel('Error')
                ax.legend()
                ax.grid()
         for j in range(len(rec_metrics_list)):
             axes[0][2].set_title(f'Reconstruction metrics for cylinder ')
-            axes[0][2].plot(x_label, rec_cali[:, j], 
+            axes[0][2].plot(eval_label, rec_cali[:, j], 
                             label=f'{rec_metrics_list[j]}',
                             linestyle=rec_metrics_style[j])
-        axes[0][2].set_xticks(range(len(x_label)))
-        axes[0][2].set_xticklabels(x_label, rotation=90)
+        axes[0][2].set_xticks(range(len(eval_label)))
+        axes[0][2].set_xticklabels(eval_label, rotation=90)
         axes[0][2].set_xlabel('Evaluation Ring Name')
         axes[0][2].set_ylabel('Error')
         axes[0][2].legend()
         axes[0][2].grid()
         plt.tight_layout()
-        fig.savefig(os.path.join(path_str, f"eval_cali_{x_label[cali]}.png"), dpi=100)
+        fig.savefig(os.path.join(path_eval, f"eval_cali_{cali_label[cali]}.png"), dpi=100)
         plt.close()
 
     funcs = [np.mean, np.max]
     desc = ['Average', 'Maximum']
     scan = np.abs(scan)
     for func, desc_str in zip(funcs, desc):
-        scan_cmp = func(scan, axis=2).squeeze()
-        rec_cmp = func(rec, axis=1).squeeze()
+        scan_cmp = func(scan, axis=2)
+        rec_cmp = func(rec, axis=1)
         fig, axes = plt.subplots(nrows=1, ncols=3, figsize=(15, 5), sharey=True)
         for loc in range(scan.shape[0]):
             for metric_idx in range(len(scan_metrics_list)):
-                axes[loc].plot(x_label, scan_cmp[loc, :, metric_idx],
+                axes[loc].plot(cali_label, scan_cmp[loc, :, metric_idx],
                                linestyle=scan_metrics_style[metric_idx],
                                label=f'{scan_metrics_list[metric_idx]}')
             for metric_idx in range(len(rec_metrics_list)):
-                axes[loc].plot(x_label, rec_cmp[:, metric_idx],
+                axes[loc].plot(cali_label, rec_cmp[:, metric_idx],
                                linestyle=rec_metrics_style[metric_idx],
                                label=f'{rec_metrics_list[metric_idx]}')
             axes[loc].set_xlabel('Calibration Ring Name')
-            axes[loc].set_xticks(range(len(x_label)))
-            axes[loc].set_xticklabels(x_label, rotation=90)
+            axes[loc].set_xticks(range(len(cali_label)))
+            axes[loc].set_xticklabels(cali_label, rotation=90)
             axes[loc].set_title(f'Scan Location {table[loc][0]}')
             axes[loc].grid()
         fig.text(
@@ -169,19 +174,25 @@ def plot_eval(path_str, recon_file, scan_file):
             ha="center",
             rotation="vertical",
             fontsize=12,
-       )
+        )
         handles, labels = axes[0].get_legend_handles_labels()
         fig.legend(handles, labels, loc='upper center', bbox_to_anchor=(0.5, -0.05), ncol=2)
         plt.subplots_adjust(bottom=0.10, wspace=0.05)
-        fig.savefig(os.path.join(path_str, f"cali_cmp_{desc_str.lower()}.png"), dpi=100, bbox_inches="tight")
+        fig.savefig(os.path.join(path_eval, f"cali_cmp_{desc_str.lower()}.png"), dpi=100, bbox_inches="tight")
         plt.close()
 
 def main():
     if len(sys.argv) > 1:
         recon_file = "recon.bin"
         scan_file = "scan.bin"
-        path = sys.argv[1]  # sys.argv[0] is the script name itself
-        plot_eval(path, os.path.join(path, recon_file), os.path.join(path, scan_file))
+        path_eval = sys.argv[1]  # sys.argv[0] is the script name itself
+        rec = os.path.join(path_eval, recon_file)
+        scan = os.path.join(path_eval, scan_file)
+        if len(sys.argv) > 2:
+            path_cali = sys.argv[2]
+            plot_eval(path_cali, path_eval, rec, scan)
+        else:
+            plot_eval(path_eval, path_eval, rec, scan)
     else:
         print("No argument provided!!!!\n Set the cali evaluation path as the first positional argument.")
 

@@ -75,6 +75,7 @@ result/
 config/
 ring_cali
 ring_cali_eval
+merge
 cali/
 measure/
 html/

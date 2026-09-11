@@ -7,9 +7,8 @@
                 "/usr/include/opencv5",
                 "/usr/local/include/pcl-1.15",
                 "/usr/include/eigen3",
-                "/usr/lib/python3.14/site-packages/numpy/_core/include",
                 "/usr/include/vtk",
-                "/usr/include/python3.14"
+                "/usr/include/ImageMagick-7"
             ],
             "defines": [],
             "compilerPath": "/usr/sbin/gcc",
