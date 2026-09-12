@@ -96,7 +96,6 @@ namespace RingMeasure {
         {
             raw_recs[loc].reset();
         }
-        
 
         std::string prefix;
         if(phase_type != rm::PhaseType::VERI)
@@ -131,6 +130,12 @@ namespace RingMeasure {
         auto & lateral = laterals[loc];
         auto & base = bases[loc];
         rec_normals[loc] = normalSegmentation(out_denoised, path_seg, prefix, lateral, base);
+
+        if(getParam().misc.memory_save)
+        {
+            rec_normals[loc].reset();
+            SPDLOG_LOGGER_ERROR(logger, "Memory saving mode is enabled. The point cloud with normals for scan {} is released.", scanLocationToString(scan_loc));
+        }
     }
 
     void RingCalibration::caliRot(fs::path path_SAC)
@@ -162,51 +167,45 @@ namespace RingMeasure {
         pcl::PassThrough<pcl::PointNormal> pass;
         pass.setInputCloud(lateral);
         pass.setFilterFieldName("y");
-        // Create a vector to store the point cloud for each slice
-        std::vector <pcl::PointCloud<pcl::PointNormal>::Ptr> slices(num_slices);
-        for(auto &cloud : slices) {
-          cloud.reset(new pcl::PointCloud<pcl::PointNormal>());
-        }
         // create a vector to store the estimations
         std::vector <cv::Point2f> points, points_major;
-        bool flag = std::filesystem::create_directories(path_SAC);
-        if(!flag & !std::filesystem::exists(path_SAC))
-        {
-          SPDLOG_LOGGER_ERROR(logger, "Failed to create directory: {}", path_SAC);
-          exit(EXIT_FAILURE);
-        }
+        CREATE_DIR(logger, path_SAC);
 
+        pcl::SACSegmentation<pcl::PointNormal> seg;
+        seg.setOptimizeCoefficients(true);
+        seg.setModelType(pcl::SACMODEL_ELLIPSE3D);
+        seg.setMethodType(pcl::SAC_RANSAC);
+        seg.setInputCloud(lateral);
+        seg.setDistanceThreshold(params.ellipse_fit_dist_thld);
+        seg.setMaxIterations(params.ellipse_fit_max_iter);
+
+        // fit an ellipse if we have enough points.
+        // at least 1% of the total points or 120 points
+        int threshold = std::max(params.ellipse_fit_num_thld, static_cast<int>(lateral->size()/num_slices*0.9f));
         for (int i=0; i<num_slices; i++)
         {
-            float pos = start_pos + (i+0.5)*sample_dist;;
+            pcl::Indices slice_indices;
+            float pos = start_pos + (i+0.5)*sample_dist;
             pass.setFilterLimits(pos - 0.5*sample_dist,
                                  pos + 0.5*sample_dist);
-            pass.filter(*slices[i]);
+            pass.filter(slice_indices);
           
-            SPDLOG_LOGGER_TRACE(logger,"Slice {:3d}: at sample height {} has {:5d} points.", i, pos, slices[i]->size());
-            if(slices[i]->size() > 0)
+            SPDLOG_LOGGER_TRACE(logger,"Slice {:3d}: at sample height {} has {:5d} points.", i, pos, slice_indices.size());
+            if(slice_indices.size() > 0)
             {
                 // save the slice to disk
                 fs::path filename = path_SAC / (std::to_string(i) + ".ply");
-                SPDLOG_EXEC(logger, spdl::trace, pcl::io::savePLYFileASCII(filename, *slices[i]));
+                pcl::PointCloud<pcl::PointNormal>::Ptr cloud_subset(new pcl::PointCloud<pcl::PointNormal>);
+                SPDLOG_EXEC(logger, spdl::trace, pcl::copyPointCloud(*lateral, slice_indices, *cloud_subset));
+                SPDLOG_EXEC(logger, spdl::trace, pcl::io::savePLYFileASCII(filename, *cloud_subset));
             }
-            // fit an ellipse if we have enough points.
-            // at least 1% of the total points or 120 points
-            int threshold = std::max(params.ellipse_fit_num_thld, static_cast<int>(lateral->size()/num_slices*0.9f));
 
-            if(slices[i]->size() > threshold)
-            {
-                pcl::SACSegmentation<pcl::PointNormal> seg;
-                seg.setOptimizeCoefficients(true);
-                seg.setModelType(pcl::SACMODEL_ELLIPSE3D);
-                seg.setMethodType(pcl::SAC_RANSAC);
-                seg.setInputCloud(slices[i]);
-                seg.setDistanceThreshold(params.ellipse_fit_dist_thld);
-                seg.setMaxIterations(params.ellipse_fit_max_iter);
-    
+            if(slice_indices.size() > threshold)
+            {    
                 pcl::PointIndices::Ptr inliers(new pcl::PointIndices);
                 pcl::ModelCoefficients::Ptr coefficients(new pcl::ModelCoefficients);
-            
+
+                seg.setIndices(std::make_shared<pcl::Indices>(slice_indices));
                 seg.segment(*inliers, *coefficients);
                 SPDLOG_LOGGER_TRACE(logger, "--- Estimated 3D Ellipse Parameters ---");
                 SPDLOG_LOGGER_TRACE(logger, "Original Point (x,y,z): ({}, {}, {})", 
@@ -307,9 +306,6 @@ namespace RingMeasure {
         // Setup Cylinder Segmentation
         // Note: The template uses <PointNormal, PointNormal> because the same cloud has both
         pcl::SACSegmentationFromNormals<pcl::PointNormal, pcl::PointNormal> seg;
-        pcl::ModelCoefficients::Ptr cylinder_coeff(new pcl::ModelCoefficients());
-        pcl::PointIndices::Ptr inliers(new pcl::PointIndices());
-    
         seg.setOptimizeCoefficients(true);
         seg.setModelType(pcl::SACMODEL_CYLINDER);
         seg.setMethodType(pcl::SAC_RANSAC);
@@ -321,11 +317,12 @@ namespace RingMeasure {
         // seg.setDistanceThreshold(0.1); 
         seg.setRadiusLimits(10.0, diameter/2.0*1.5);
         seg.setProbability(params.cylinder_fit_prob);
-    
         // Pass the SAME cloud as both the points and the normals
         seg.setInputCloud(lateral);
         seg.setInputNormals(lateral); 
-        
+
+        pcl::ModelCoefficients::Ptr cylinder_coeff(new pcl::ModelCoefficients());
+        pcl::PointIndices::Ptr inliers(new pcl::PointIndices());
         seg.segment(*inliers, *cylinder_coeff);
     
         pcl::PointCloud<pcl::PointNormal>::Ptr cylinder_cloud(new pcl::PointCloud<pcl::PointNormal>());
@@ -333,14 +330,7 @@ namespace RingMeasure {
         if (inliers->indices.empty()) {
             SPDLOG_LOGGER_ERROR(logger, "Could not estimate a cylindrical model, not enough inliners found.");
         } else {
-            // Assuming 'cloud' is your input cloud, and 'inliers' contains the cylinder indices:
-            pcl::ExtractIndices<pcl::PointNormal> extract;
-            
-            extract.setInputCloud(lateral);
-            extract.setIndices(inliers);
-            extract.setNegative(false); // false = keep ONLY the cylinder inliers
-            extract.filter(*cylinder_cloud);
-
+            pcl::copyPointCloud(*lateral, *inliers, *cylinder_cloud);
             pcl::getMinMax3D(*cylinder_cloud, min_pt, max_pt);
             SPDLOG_LOGGER_TRACE(logger,"Bounding box of the lateral_output:");
             SPDLOG_LOGGER_TRACE(logger,"Min point (x_min,y_min,z_min): ({},{},{})", min_pt.x(), min_pt.y(), min_pt.z());
@@ -376,7 +366,6 @@ namespace RingMeasure {
 
         pcl::ModelCoefficients::Ptr plane_coeff(new pcl::ModelCoefficients);
         pcl::PointIndices::Ptr plane_inliers(new pcl::PointIndices);
-
         seg.segment(*plane_inliers, *plane_coeff);
 
         pcl::PointCloud<pcl::PointNormal>::Ptr plane_cloud(new pcl::PointCloud<pcl::PointNormal>());
@@ -384,14 +373,7 @@ namespace RingMeasure {
         if (plane_inliers->indices.empty()) {
             SPDLOG_LOGGER_INFO(logger, "Could not estimate a plane model.");
         } else {
-            // Assuming 'cloud' is your input cloud, and 'inliers' contains the cylinder indices:
-            pcl::ExtractIndices<pcl::PointNormal> extract;
-            
-            extract.setInputCloud(base);
-            extract.setIndices(plane_inliers);
-            extract.setNegative(false); // false = keep ONLY the cylinder inliers
-            extract.filter(*plane_cloud);
-            
+            pcl::copyPointCloud(*base, *plane_inliers, *plane_cloud);
             pcl::getMinMax3D(*plane_cloud, min_pt, max_pt);
             SPDLOG_LOGGER_TRACE(logger,"Bounding box of the plane_cloud:");
             SPDLOG_LOGGER_TRACE(logger,"Min point (x_min,y_min,z_min): ({},{},{})", min_pt.x(), min_pt.y(), min_pt.z());
@@ -399,28 +381,29 @@ namespace RingMeasure {
             fs::path filename = path_SAC / "plane_output.ply";
             SPDLOG_LOGGER_DEBUG(logger, "Extracted plane cloud with {}/{} points.", plane_cloud->size(), base->size());
             SPDLOG_EXEC(logger, spdl::debug, pcl::io::savePLYFileASCII(filename, *plane_cloud));
-        }
 
-        SPDLOG_LOGGER_INFO(logger, "--- Plane Coefficients ---");
-        SPDLOG_LOGGER_INFO(logger, "Normal Vector: ({}, {}, {}), Distance from origin: {}", 
-                           plane_coeff->values[0], 
-                           plane_coeff->values[1], 
-                           plane_coeff->values[2], 
-                           plane_coeff->values[3]);
-        // height, normal
-        base_fit[loc] = std::make_tuple(plane_coeff->values[3],
-             Eigen::Vector3f(plane_coeff->values[0], plane_coeff->values[1], plane_coeff->values[2])
-        );
-
-        // draw the histogram of the y coordinates
-        std::vector<float> y_coords;
-        y_coords.reserve(base->size());
-        for (const auto& point : base->points) {
-            y_coords.push_back(point.y);
+            SPDLOG_LOGGER_INFO(logger, "--- Plane Coefficients ---");
+            SPDLOG_LOGGER_INFO(logger, "Normal Vector: ({}, {}, {}), Distance from origin: {}", 
+                               plane_coeff->values[0], 
+                               plane_coeff->values[1], 
+                               plane_coeff->values[2], 
+                               plane_coeff->values[3]);
+            // height, normal
+            base_fit[loc] = std::make_tuple(plane_coeff->values[3],
+                Eigen::Vector3f(plane_coeff->values[0], plane_coeff->values[1], plane_coeff->values[2])
+            );
         }
-        std::string path = path_SAC.string();
-        const int show = 0;
-        // /py hist.plot_hist($show)
+        #if SPDLOG_LEVEL_TRACE >= ACTIVE_LOG_LEVEL
+            // draw the histogram of the y coordinates
+            std::vector<float> y_coords;
+            y_coords.reserve(base->size());
+            for (const auto& point : base->points) {
+                y_coords.push_back(point.y);
+            }
+            std::string path = path_SAC.string();
+            const int show = 0;
+            // /py hist.plot_hist($show)
+        #endif
 
         // dump the cylinder before and after SAC estimation
         SPDLOG_LOGGER_INFO(logger, "Saving the cylinder point cloud to {}.", path_SAC / "cylinder.ply");

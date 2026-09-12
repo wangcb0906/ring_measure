@@ -38,7 +38,6 @@ namespace RingMeasure {
                 logger = spdlog::default_logger();;
                 camera_resolution = measure.ring.dA * M_PI / 360.0f;
                 mid_height = measure.ring.h/2.0 + system.robot.table_h - system.robot.wedge_h;
-                smallest_value = system.sensor.z_oft/1.0e5  - system.sensor.mount_height;
                 measure_ready = true;
                 system_ready = true;
             };
@@ -104,7 +103,6 @@ namespace RingMeasure {
             void setSystem(const rm::SystemCfg &system_)
             { 
                 system = system_; 
-                smallest_value = system.sensor.z_oft/1.0e5  - system.sensor.mount_height;
                 system_ready = true;
                 if(measure_ready)
                     mid_height = measure.ring.h/2.0 + system.robot.table_h - system.robot.wedge_h;
@@ -277,7 +275,7 @@ namespace RingMeasure {
              */
             pcl::PointCloud<pcl::PointNormal>::Ptr
             normalSegmentation(
-                const pcl::PointCloud<pcl::PointXYZ>::Ptr& input,
+                pcl::PointCloud<pcl::PointXYZ>::Ptr& input,
                 fs::path path,
                 const std::string prefix,
                 pcl::PointCloud<pcl::PointNormal>::Ptr& lateral,
@@ -296,7 +294,6 @@ namespace RingMeasure {
             rm::SystemCfg system;                   ///< System configuration
             int camera_resolution;                  ///< Camera resolution
             float mid_height;                       ///< Middle height of the scan
-            float smallest_value;                   ///< Smallest value in the point cloud
 
             // result from cylinder fitting
             std::array<CYLFitMetricTuple, NUM> cyl_fit;

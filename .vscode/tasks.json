@@ -23,6 +23,7 @@
                 "--target",
                 "ring_cali",
                 "-j",
+                "--clean-first"
             ],
             "dependsOn": [
                 "cmake_configure"
@@ -43,6 +44,7 @@
                 "build",
                 "--target",
                 "ring_cali_eval",
+                "--clean-first",
                 "-j",
             ],
             "dependsOn": [

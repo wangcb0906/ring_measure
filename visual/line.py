@@ -19,7 +19,6 @@ def plot_line(idx, show, ra, ri, h, table_h):
     path_str = path_val.GetSummary().strip('"')
     # debug only for verification
 
-    pts_val = frame.EvaluateExpression("points")
     scan_loc_val = frame.EvaluateExpression("scan_loc")
     scan_loc = scan_loc_val.GetObjectDescription() or scan_loc_val.GetValue()
 
@@ -30,10 +29,8 @@ def plot_line(idx, show, ra, ri, h, table_h):
     if not "Out" in scan_loc:
         idx = (idx + 180) % 360
     
-
-    points = parse.parse_vector(frame, "points", dimensions=[2])
-    x = points[:, 0] * flag
-    y = points[:, 1]
+    x = parse.parse_vector(frame, "cloud_x") * flag
+    y = parse.parse_vector(frame, "cloud_y")
 
     # 3. Map colors to match your C++ color logic
     color_map = {

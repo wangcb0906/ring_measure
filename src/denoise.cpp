@@ -30,24 +30,6 @@ namespace {
         {0,   0,   255}, // Cluster 2: Pure Blue
         {255, 255, 0}    // Cluster 3: Yellow
     };
-    pcl::PointCloud<pcl::PointNormal>::Ptr
-    removeCurvatureNan(const pcl::PointCloud<pcl::PointNormal>::Ptr& cloud,
-                       const std::shared_ptr<spdlog::logger> &logger)
-    {
-        size_t nan_curvature_count = 0;
-        pcl::PointCloud<pcl::PointNormal>::Ptr valid_points(new pcl::PointCloud<pcl::PointNormal>);
-        valid_points->reserve(cloud->size());
-        for (const auto& pt : *cloud) {
-            if (!std::isnan(pt.curvature) && !std::isinf(pt.curvature)) {
-                valid_points->push_back(pt);
-            } else {
-                SPDLOG_LOGGER_TRACE(logger, "Skipping point with NaN or Inf curvature: ({}, {}, {})", pt.x, pt.y, pt.z);
-                nan_curvature_count++;
-            }
-        }
-        SPDLOG_LOGGER_DEBUG(logger, "Number of points with NaN curvature: {}/{}", nan_curvature_count, cloud->size());
-        return valid_points;
-    }
     
     // The curvature in PCL is stored as float.
     float getCurvThld(const pcl::PointCloud<pcl::PointNormal>::Ptr& cloud,
@@ -77,7 +59,9 @@ namespace {
             kmeans.kMeans();
             auto centroids = kmeans.get_centroids();
             std::vector<size_t> cluster_sizes(centroids.size(), 0);
-            pcl::PointCloud<pcl::PointXYZRGB>::Ptr colored_cloud(new pcl::PointCloud<pcl::PointXYZRGB>);
+            #if SPDLOG_LEVEL_TRACE >= ACTIVE_LOG_LEVEL
+                pcl::PointCloud<pcl::PointXYZRGB>::Ptr colored_cloud(new pcl::PointCloud<pcl::PointXYZRGB>);
+            #endif
             SPDLOG_EXEC(logger, spdl::trace, colored_cloud->resize(cloud->size()););
             for (size_t i = 0; i < cloud->size(); ++i) {
                 const auto& pt = cloud->points[i];
@@ -268,8 +252,6 @@ namespace RingMeasure {
       
         SPDLOG_LOGGER_DEBUG(logger, "Writing the {} clusters of out denoised to: {}", ec_out_indices.size(), path);
         SPDLOG_EXEC(logger, spdl::debug, rm::writeSegmentation<pcl::PointXYZ>(input, ec_out_indices, path, prefix + "ECSeg_", 100, logger));
-        // rm::writeSegmentation<pcl::PointXYZ>(input, ec_out_indices, path, prefix + "ECSeg_", 100, logger);
-        // write the point cloud to disk 
         SPDLOG_LOGGER_INFO(logger, "Saving denoised reconstruction to {}", path / (prefix + "EC_out.ply"));
         SPDLOG_EXEC(logger, spdl::info, pcl::io::savePLYFileASCII(path / (prefix + "EC_out.ply"), *colored_ec_out));
       
@@ -376,7 +358,7 @@ namespace RingMeasure {
     }
 
     pcl::PointCloud<pcl::PointNormal>::Ptr RingCalibration::normalSegmentation(
-        const pcl::PointCloud<pcl::PointXYZ>::Ptr& input,
+        pcl::PointCloud<pcl::PointXYZ>::Ptr& input,
         std::filesystem::path path,
         std::string prefix,
         pcl::PointCloud<pcl::PointNormal>::Ptr& lateral,
@@ -406,28 +388,41 @@ namespace RingMeasure {
                 n.normal_y = -n.normal_y;
                 n.normal_z = -n.normal_z;
             }
-            
+
             pcl::PointCloud<pcl::PointNormal>::Ptr input_with_normals (new pcl::PointCloud<pcl::PointNormal>);
             pcl::concatenateFields(*input, *normals, *input_with_normals);
+            input.reset();
+            normals.reset();
+
+            input_with_normals->points.erase(
+                std::remove_if(input_with_normals->points.begin(), input_with_normals->points.end(),
+                    [](const pcl::PointNormal& pt) {
+                        return std::isnan(pt.curvature);
+                    }),
+                input_with_normals->points.end()
+            );
+            input_with_normals->width = static_cast<uint32_t>(input_with_normals->points.size());
+            input_with_normals->height = 1;
             
-            pcl::RegionGrowing<pcl::PointXYZ, pcl::Normal> reg;
+            pcl::search::KdTree<pcl::PointNormal>::Ptr tree_(new pcl::search::KdTree<pcl::PointNormal>);
+
+            pcl::RegionGrowing<pcl::PointNormal, pcl::PointNormal> reg;
             reg.setResidualThreshold (camera_resolution * params.residual_ratio);
             reg.setMinClusterSize (params.min_cluster_size);
-            reg.setMaxClusterSize (input->size());
-            tree->setInputCloud (input);
-            reg.setSearchMethod (tree);
+            reg.setMaxClusterSize (input_with_normals->size());
+            tree_->setInputCloud (input_with_normals);
+            reg.setSearchMethod (tree_);
             reg.setNumberOfNeighbours (params.num_neighbors);
-            reg.setInputCloud (input);
-            reg.setInputNormals (normals);
+            reg.setInputCloud (input_with_normals);
+            reg.setInputNormals (input_with_normals);
 
-            auto nan_curv_removed =  removeCurvatureNan(input_with_normals, logger);
             float curv_thld = 0.0;
             if(params.curvature_type == OperationMode::MANUAL)
             {
                 reg.setCurvatureThreshold (params.curvature_thld);
             } else if(params.curvature_type == OperationMode::AUTO)
             {
-                curv_thld = getCurvThld(nan_curv_removed, path / (prefix + "curv_clustering_visualization.ply"), params, getScanNum(), logger);
+                curv_thld = getCurvThld(input_with_normals, path / (prefix + "curv_clustering_visualization.ply"), params, getScanNum(), logger);
                 reg.setCurvatureThreshold (curv_thld);
                 SPDLOG_LOGGER_INFO(logger, "Curvature threshold is automatically determined.");
             } else 
@@ -442,7 +437,7 @@ namespace RingMeasure {
             } else if(params.normal_type == OperationMode::AUTO)
             {
                 SPDLOG_LOGGER_INFO(logger, "Normal threshold is automatically determined.");
-                float normal_thld = getNormalThld(nan_curv_removed, path / (prefix + "normal_clustering_visualization.ply"), params,logger);
+                float normal_thld = getNormalThld(input_with_normals, path / (prefix + "normal_clustering_visualization.ply"), params,logger);
                 reg.setSmoothnessThreshold (normal_thld);
                 SPDLOG_LOGGER_INFO(logger, "Smoothness threshold is automatically determined.");
             } else 
@@ -451,11 +446,11 @@ namespace RingMeasure {
                 exit(EXIT_FAILURE);
             }
 
-            SPDLOG_EXEC(logger, spdl::debug, visualizeCurvature(nan_curv_removed, curv_thld, 
+            SPDLOG_EXEC(logger, spdl::debug, visualizeCurvature(input_with_normals, curv_thld, 
                 path / (prefix + "curvature_binary.ply"), logger));
-            SPDLOG_EXEC(logger, spdl::debug, visualizeCurvature(nan_curv_removed, 0.0, 
+            SPDLOG_EXEC(logger, spdl::debug, visualizeCurvature(input_with_normals, 0.0, 
                 path / (prefix + "curvature_max_min.ply"), logger));
-            SPDLOG_EXEC(logger, spdl::debug, visualizeNormal(nan_curv_removed,
+            SPDLOG_EXEC(logger, spdl::debug, visualizeNormal(input_with_normals,
                 path / (prefix + "normal_normalized_visualization.ply"), logger));
             
             std::vector <pcl::PointIndices> segmentation_indices;
@@ -486,8 +481,8 @@ namespace RingMeasure {
                 // select the cluster lateral and the base
                 int lateral_idx = 0, base_idx = 1;
                 Eigen::Vector4f lateral_centroid, base_centroid;
-                pcl::compute3DCentroid(*input, segmentation_indices[lateral_idx], lateral_centroid);
-                pcl::compute3DCentroid(*input, segmentation_indices[base_idx], base_centroid);
+                pcl::compute3DCentroid(*input_with_normals, segmentation_indices[lateral_idx], lateral_centroid);
+                pcl::compute3DCentroid(*input_with_normals, segmentation_indices[base_idx], base_centroid);
                 // How to configure the functional?
                 // This function aims to distinguish the base and the lateral of the cylinder. And we want to
                 // select the lateral of the cone, which has a smaller y coordinate than the base.
@@ -557,7 +552,7 @@ namespace RingMeasure {
                 for (int i = 0; i < target_clusters.size(); ++i)
                 {
                     Eigen::Vector4f centroid;
-                    pcl::compute3DCentroid(*input, target_clusters[i].indices, centroid);
+                    pcl::compute3DCentroid(*input_with_normals, target_clusters[i].indices, centroid);
                     feature_y.at<float>(i, 0) = centroid.y();
                 }
                 cv::Mat labels_y, centers_y;
