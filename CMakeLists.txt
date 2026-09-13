@@ -60,8 +60,13 @@ add_compile_definitions(SPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_${LOG_LEVEL})
 
 add_compile_definitions(
     SPDLOG_FMT_EXTERNAL
-    # PCL_NO_PRECOMPILE
 )
+
+if(MINGW)
+add_compile_definitions(
+    PCL_NO_PRECOMPILE
+)
+endif()
 
 # ------------------------------------------------------------
 # Core library
