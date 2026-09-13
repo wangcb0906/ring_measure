@@ -20,6 +20,11 @@ set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)
 set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)
 set(CMAKE_FIND_ROOT_PATH_MODE_PACKAGE ONLY)
 
+set(OpenCV_DIR
+    "/usr/x86_64-w64-mingw32/static/lib/cmake/opencv5"
+    CACHE PATH "OpenCV CMake package directory"
+)
+
 # To build for Windows, run the following commands in the project root directory:
 # rm -rf build-win
 # cmake -S . -B build-win -G "Unix Makefiles" -DCMAKE_TOOLCHAIN_FILE="$PWD/cmake/mingw-w64-x86_64.cmake"
