@@ -73,7 +73,11 @@ namespace RingMeasure
               SPDLOG_LOGGER_DEBUG(logger, "Cluster {:3d} has {:6d} points.", i, cluster_cloud->size());
               // Save individual cluster to disk
               std::string filename = (path / (prefix + std::to_string(i) + ".ply")).string();
-              SPDLOG_EXEC(logger, spdlog::level::info, pcl::io::savePLYFileASCII(filename, *cluster_cloud));
+              #if RING_MEASURE_SAVE_PLY_TYPE == RING_MEASURE_SAVE_BIN
+                  SPDLOG_EXEC(logger, spdlog::level::info, pcl::io::savePLYFileBinary(filename, *cluster_cloud));
+              #else
+                  SPDLOG_EXEC(logger, spdlog::level::info, pcl::io::savePLYFileASCII(filename, *cluster_cloud));
+              #endif
           }
       }
     

@@ -122,6 +122,8 @@ main (int argc, char* argv[])
     rm::SystemCfg sys_;
     rm::loadSystemConfig(system_cfg_file, sys_);
     SPDLOG_LOGGER_INFO(logger, "Loaded configuration from {}.", system_cfg_file);
+    sys_.robot.table_h -= sys_.robot.wedge_h;
+    SPDLOG_LOGGER_INFO(logger, "Adjusted table height by subtracting wedge height. New table height: {}.", sys_.robot.table_h);
 
     auto single_cfg_file = program.present<std::string>("--ring-cfg");
 

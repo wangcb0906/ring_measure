@@ -68,9 +68,8 @@ void RingMeasure::RingCalibration::reconstruct(const fs::path& path_)
         for (size_t i = 0; i < max_res; ++i) {
             if(scan_buffer[i] > 0)
             {
-                float raw_y = static_cast<float>(scan_buffer[i]) * system.sensor.z_pitch/1.0e5
-                              + system.sensor.z_oft/1.0e5
-                              - system.sensor.mount_height;
+                float raw_y = static_cast<float>(scan_buffer[i]) * pitch_scale
+                              + pitch_offset;
                 line_cloud->emplace_back(x[i], raw_y, 0.0f);
             }
         }
@@ -96,7 +95,7 @@ void RingMeasure::RingCalibration::reconstruct(const fs::path& path_)
                 float ra = measure.ring.dA/2;
                 float ri = measure.ring.dI/2;
                 float h = measure.ring.h;
-                float table_h = system.robot.table_h - system.robot.wedge_h;
+                float table_h = system.robot.table_h;
                 const std::string path = path_.string();
                 std::vector<float> cloud_x;
                 std::vector<float> cloud_y;

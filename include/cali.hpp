@@ -27,22 +27,6 @@ namespace RingMeasure {
             RingCalibration() = default;
 
             /**
-             * @brief Construct a new RingCalibration object using measurement and system configurations.
-             * 
-             * @param measure Measurement configuration parameters.
-             * @param system System and robot configuration parameters.
-             */
-            RingCalibration(const rm::MeasureCfg& measure, const rm::SystemCfg& system)
-             : measure(measure), system(system)
-            {
-                logger = spdlog::default_logger();;
-                camera_resolution = measure.ring.dA * M_PI / 360.0f;
-                mid_height = measure.ring.h/2.0 + system.robot.table_h - system.robot.wedge_h;
-                measure_ready = true;
-                system_ready = true;
-            };
-
-            /**
              * @brief Destroy the RingCalibration object and release allocated point cloud resources.
              */
             ~RingCalibration()
@@ -95,7 +79,7 @@ namespace RingMeasure {
                 measure = measure_; 
                 camera_resolution = measure.ring.dA * M_PI / 360.0f;
                 if(system_ready)
-                    mid_height = measure.ring.h/2.0 + system.robot.table_h - system.robot.wedge_h;
+                    mid_height = measure.ring.h/2.0 + system.robot.table_h;
                 measure_ready = true;
             }
 
@@ -105,7 +89,9 @@ namespace RingMeasure {
                 system = system_; 
                 system_ready = true;
                 if(measure_ready)
-                    mid_height = measure.ring.h/2.0 + system.robot.table_h - system.robot.wedge_h;
+                    mid_height = measure.ring.h/2.0 + system.robot.table_h;
+                pitch_scale = system.sensor.z_pitch/1.0e5;
+                pitch_offset = system.sensor.z_oft/1.0e5 - system.sensor.mount_height;
             }
 
             void setSystemCorrection(const std::array<RingMeasure::ScanCfg, static_cast<size_t>(rm::ScanLocation::NUM)> &correction)
@@ -294,6 +280,8 @@ namespace RingMeasure {
             rm::SystemCfg system;                   ///< System configuration
             int camera_resolution;                  ///< Camera resolution
             float mid_height;                       ///< Middle height of the scan
+            float pitch_scale;
+            float pitch_offset;
 
             // result from cylinder fitting
             std::array<CYLFitMetricTuple, NUM> cyl_fit;

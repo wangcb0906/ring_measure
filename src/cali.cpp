@@ -107,10 +107,16 @@ namespace RingMeasure {
         // write the point cloud to disk
         fs::path file_name = prefix + "original_recon_" + str(ss) + ".ply";
         SPDLOG_LOGGER_INFO(logger, "Reconstructed point cloud from {} scan: {} points", str(ss), out->size());
+        #if RING_MEASURE_SAVE_PLY_TYPE == RING_MEASURE_SAVE_BIN
+            SPDLOG_EXEC(logger, spdl::info, pcl::io::savePLYFileBinary(path_den / (prefix + "Recon_Denoised.ply"), *out_denoised));
+            SPDLOG_EXEC(logger, spdl::info, pcl::io::savePLYFileBinary(path_den / file_name, *out));
+        #else
+            SPDLOG_EXEC(logger, spdl::info, pcl::io::savePLYFileASCII(path_den / (prefix + "Recon_Denoised.ply"), *out_denoised));
+            SPDLOG_EXEC(logger, spdl::info, pcl::io::savePLYFileASCII(path_den / file_name, *out));
+        #endif
         SPDLOG_LOGGER_INFO(logger, "Saving reconstructed point cloud to {}", path_den / file_name);
-        SPDLOG_EXEC(logger, spdl::info, pcl::io::savePLYFileASCII(path_den / file_name, *out));
         SPDLOG_LOGGER_INFO(logger, "Saving the selected EC denoised cluster to {}: {} points", path_den / (prefix + "Recon_Denoised.ply"), out_denoised->size());
-        SPDLOG_EXEC(logger, spdl::info, pcl::io::savePLYFileASCII(path_den / (prefix + "Recon_Denoised.ply"), *out_denoised));
+
       
         // Further downsample the point cloud to estimate the normals
         pcl::VoxelGrid<pcl::PointXYZ> vox;
@@ -195,9 +201,15 @@ namespace RingMeasure {
             {
                 // save the slice to disk
                 fs::path filename = path_SAC / (std::to_string(i) + ".ply");
-                pcl::PointCloud<pcl::PointNormal>::Ptr cloud_subset(new pcl::PointCloud<pcl::PointNormal>);
-                SPDLOG_EXEC(logger, spdl::trace, pcl::copyPointCloud(*lateral, slice_indices, *cloud_subset));
-                SPDLOG_EXEC(logger, spdl::trace, pcl::io::savePLYFileASCII(filename, *cloud_subset));
+                #if SPDLOG_LEVEL_TRACE >= SPDLOG_ACTIVE_LEVEL
+                    pcl::PointCloud<pcl::PointNormal>::Ptr cloud_subset(new pcl::PointCloud<pcl::PointNormal>);
+                    pcl::copyPointCloud(*lateral, slice_indices, *cloud_subset);
+                    #if RING_MEASURE_SAVE_PLY_TYPE == RING_MEASURE_SAVE_BIN
+                        SPDLOG_EXEC(logger, spdl::trace, pcl::io::savePLYFileBinary(filename, *cloud_subset));
+                    #else
+                        SPDLOG_EXEC(logger, spdl::trace, pcl::io::savePLYFileASCII(filename, *cloud_subset));
+                    #endif
+                #endif
             }
 
             if(slice_indices.size() > threshold)
@@ -274,8 +286,8 @@ namespace RingMeasure {
             mad_detector.fit();
             mad_detector.getInlierMean();
             radius_eval[loc][static_cast<size_t>(AxisType::MINOR)] = mad_detector.getInlierMean();
-            SPDLOG_LOGGER_DEBUG(logger, "[Major] MAD: Estimated radius of the line fitting: {}.", radius_eval[loc][static_cast<size_t>(AxisType::MAJOR)]);
-            SPDLOG_LOGGER_DEBUG(logger, "[Minor] MAD: Estimated radius of the line fitting: {}.", radius_eval[loc][static_cast<size_t>(AxisType::MINOR)]);
+            SPDLOG_LOGGER_INFO(logger, "[Major] MAD: Estimated radius of the line fitting: {}.", radius_eval[loc][static_cast<size_t>(AxisType::MAJOR)]);
+            SPDLOG_LOGGER_INFO(logger, "[Minor] MAD: Estimated radius of the line fitting: {}.", radius_eval[loc][static_cast<size_t>(AxisType::MINOR)]);
         }
     }
 
@@ -299,9 +311,14 @@ namespace RingMeasure {
         SPDLOG_LOGGER_TRACE(logger,"Min point (x_min,y_min,z_min): ({},{},{})", min_pt.x(), min_pt.y(), min_pt.z());
         SPDLOG_LOGGER_TRACE(logger,"Max point (x_max,y_max,z_max): ({},{},{})", max_pt.x(), max_pt.y(), max_pt.z());
         SPDLOG_LOGGER_INFO(logger, "Saving the lateral point cloud to {}.", file_lateral);
-        SPDLOG_EXEC(logger, spdl::info, pcl::io::savePLYFileASCII(file_lateral, *lateral));
         SPDLOG_LOGGER_INFO(logger, "Saving the base point cloud to {}.", file_base);
-        SPDLOG_EXEC(logger, spdl::info, pcl::io::savePLYFileASCII(file_base, *base));
+        #if RING_MEASURE_SAVE_PLY_TYPE == RING_MEASURE_SAVE_BIN
+            SPDLOG_EXEC(logger, spdl::info, pcl::io::savePLYFileBinary(file_lateral, *lateral));
+            SPDLOG_EXEC(logger, spdl::info, pcl::io::savePLYFileBinary(file_base, *base));
+        #else
+            SPDLOG_EXEC(logger, spdl::info, pcl::io::savePLYFileASCII(file_lateral, *lateral));
+            SPDLOG_EXEC(logger, spdl::info, pcl::io::savePLYFileASCII(file_base, *base));
+        #endif
 
         // Setup Cylinder Segmentation
         // Note: The template uses <PointNormal, PointNormal> because the same cloud has both
@@ -337,7 +354,11 @@ namespace RingMeasure {
             SPDLOG_LOGGER_TRACE(logger,"Max point (x_max,y_max,z_max): ({},{},{})", max_pt.x(), max_pt.y(), max_pt.z());
             fs::path filename = path_SAC / "lateral_output.ply";
             SPDLOG_LOGGER_DEBUG(logger, "Extracted lateral cloud with {}/{} points.", cylinder_cloud->size(), lateral->size());
-            SPDLOG_EXEC(logger, spdl::debug, pcl::io::savePLYFileASCII(filename, *cylinder_cloud));
+            #if RING_MEASURE_SAVE_PLY_TYPE == RING_MEASURE_SAVE_BIN
+                SPDLOG_EXEC(logger, spdl::debug, pcl::io::savePLYFileBinary(filename, *cylinder_cloud));
+            #else
+                SPDLOG_EXEC(logger, spdl::debug, pcl::io::savePLYFileASCII(filename, *cylinder_cloud));
+            #endif
         }
     
         SPDLOG_LOGGER_INFO(logger, "--- Estimated Cylinder Parameters ---");
@@ -346,6 +367,8 @@ namespace RingMeasure {
         SPDLOG_LOGGER_INFO(logger, "Axis Direction (dx,dy,dz): ({}, {}, {})", 
                            cylinder_coeff->values[3], cylinder_coeff->values[4], cylinder_coeff->values[5]);
         SPDLOG_LOGGER_INFO(logger, "Radius: {:.3f}", cylinder_coeff->values[6]);
+        float real_diameter = scan_loc == ScanLocation::In ? measure.ring.dI / 2.0 : measure.ring.dA / 2.0;
+        SPDLOG_LOGGER_INFO(logger, "The real value of the radius is: {:.3f}", real_diameter/2.0);
         
         // radius, axis, center
         cyl_fit[loc] = std::make_tuple(cylinder_coeff->values[6],
@@ -380,7 +403,11 @@ namespace RingMeasure {
             SPDLOG_LOGGER_TRACE(logger,"Max point (x_max,y_max,z_max): ({},{},{})", max_pt.x(), max_pt.y(), max_pt.z());
             fs::path filename = path_SAC / "plane_output.ply";
             SPDLOG_LOGGER_DEBUG(logger, "Extracted plane cloud with {}/{} points.", plane_cloud->size(), base->size());
-            SPDLOG_EXEC(logger, spdl::debug, pcl::io::savePLYFileASCII(filename, *plane_cloud));
+            #if RING_MEASURE_SAVE_PLY_TYPE == RING_MEASURE_SAVE_BIN
+                SPDLOG_EXEC(logger, spdl::debug, pcl::io::savePLYFileBinary(filename, *plane_cloud));
+            #else
+                SPDLOG_EXEC(logger, spdl::debug, pcl::io::savePLYFileASCII(filename, *plane_cloud));
+            #endif
 
             SPDLOG_LOGGER_INFO(logger, "--- Plane Coefficients ---");
             SPDLOG_LOGGER_INFO(logger, "Normal Vector: ({}, {}, {}), Distance from origin: {}", 
@@ -388,6 +415,9 @@ namespace RingMeasure {
                                plane_coeff->values[1], 
                                plane_coeff->values[2], 
                                plane_coeff->values[3]);
+            float real_height = (scan_loc == ScanLocation::Under ? measure.ring.h : 0.0)
+                + system.robot.table_h;
+            SPDLOG_LOGGER_INFO(logger, "The real value of the height is: {}", real_height);
             // height, normal
             base_fit[loc] = std::make_tuple(plane_coeff->values[3],
                 Eigen::Vector3f(plane_coeff->values[0], plane_coeff->values[1], plane_coeff->values[2])
@@ -407,9 +437,14 @@ namespace RingMeasure {
 
         // dump the cylinder before and after SAC estimation
         SPDLOG_LOGGER_INFO(logger, "Saving the cylinder point cloud to {}.", path_SAC / "cylinder.ply");
-        SPDLOG_EXEC(logger, spdl::info, pcl::io::savePLYFileASCII(path_SAC / "cylinder.ply", *base + *lateral));
         SPDLOG_LOGGER_DEBUG(logger, "Saving the segmented cylinder point cloud to {}.", path_SAC / "cylinder_output.ply");
-        SPDLOG_EXEC(logger, spdl::debug, pcl::io::savePLYFileASCII(path_SAC / "cylinder_output.ply", *cylinder_cloud + *plane_cloud));
+        #if RING_MEASURE_SAVE_PLY_TYPE == RING_MEASURE_SAVE_BIN
+            SPDLOG_EXEC(logger, spdl::info, pcl::io::savePLYFileBinary(path_SAC / "cylinder.ply", *base + *lateral));
+            SPDLOG_EXEC(logger, spdl::debug, pcl::io::savePLYFileBinary(path_SAC / "cylinder_output.ply", *cylinder_cloud + *plane_cloud));
+        #else
+            SPDLOG_EXEC(logger, spdl::info, pcl::io::savePLYFileASCII(path_SAC / "cylinder.ply", *base + *lateral));
+            SPDLOG_EXEC(logger, spdl::debug, pcl::io::savePLYFileASCII(path_SAC / "cylinder_output.ply", *cylinder_cloud + *plane_cloud));
+        #endif
     }
  
     void RingCalibration::
@@ -480,7 +515,7 @@ namespace RingMeasure {
                 // Compute the real radius of the ring. radius = ring.dA/2
                 // Compute the real postion of the plane. pos = table_h + ring.h
                 rm::Point2f out_real (measure.ring.dA/2.0f,
-                    system.robot.table_h + measure.ring.h - system.robot.wedge_h);
+                    system.robot.table_h + measure.ring.h);
                 rm::Point2f out_correction = pos_est - out_real;
                 system.robot.scans[loc].pos_corr.x += out_correction.x;
                 system.robot.scans[loc].pos_corr.y -= out_correction.y;
@@ -491,7 +526,7 @@ namespace RingMeasure {
                 // Compute the real radius of the ring. radius = ring.dI/2
                 // Compute the real postion of the plane. pos = table_h + ring.h
                 rm::Point2f in_real (measure.ring.dI/2.0f,
-                    system.robot.table_h + measure.ring.h - system.robot.wedge_h);
+                    system.robot.table_h + measure.ring.h);
                 rm::Point2f in_correction = pos_est - in_real;
                 system.robot.scans[loc].pos_corr -= in_correction;
                 break;
@@ -500,8 +535,7 @@ namespace RingMeasure {
             {
                 // Compute the real radius of the ring. radius = ring.dA/2
                 // Compute the real postion of the plane. pos = table_h
-                rm::Point2f under_real (measure.ring.dA/2.0f,
-                    system.robot.table_h - system.robot.wedge_h);
+                rm::Point2f under_real (measure.ring.dA/2.0f, system.robot.table_h);
                 rm::Point2f under_correction = pos_est - under_real;
                 system.robot.scans[loc].pos_corr -= under_correction;
                 break;

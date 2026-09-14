@@ -77,6 +77,7 @@ main (int argc, char* argv[])
 
     program.add_argument("-m", "--minus-wedge")
            .help("If it is specified, the height of the table will be subtracted by the height of the wedge.\n"
+                 "Set it true for calibration and false for measurement.\n"
                  "The defaut value is false.\n"
                  )
            .default_value(false)
@@ -195,6 +196,10 @@ main (int argc, char* argv[])
 
     rm::SystemCfg sys_;
     rm::loadSystemConfig(system_cfg_file, sys_);
+    if(program.get<bool>("minus-wedge"))
+    {
+        sys_.robot.table_h -= sys_.robot.wedge_h;
+    } 
     SPDLOG_LOGGER_INFO(logger, "Loaded configuration from {}.", system_cfg_file);
     rm::RingCfg ring_profile;
 
@@ -307,10 +312,6 @@ main (int argc, char* argv[])
     float di = ring_profile.dI/2;
     float h = ring_profile.h;
     float table_h = sys_.robot.table_h;
-    if(program.get<bool>("minus-wedge"))
-    {
-        table_h -= sys_.robot.wedge_h;
-    } 
     float metadata[4] = {da, di, h, table_h};
     // /py eval.plot_eval($da, $di, $h, $table_h)
 

@@ -49,12 +49,12 @@ def plot_eval(path_cali, path_eval, recon_file, scan_file):
 
     cali_root = os.path.dirname(os.path.normpath(path_cali))
     cali_config = os.path.join(cali_root, "config")
-    cali_label = sorted(os.listdir(cali_config))
+    cali_label = sorted([x for x in os.listdir(cali_config) if x.endswith(".ini")])
     cali_label = [x.removesuffix(".ini")[-4:] if len(x.removesuffix(".ini")) > 4 else x.removesuffix(".ini") for x in cali_label]
 
     eval_root = os.path.dirname(os.path.normpath(path_eval))
     eval_config = os.path.join(eval_root, "config")
-    eval_label = sorted(os.listdir(eval_config))
+    eval_label = sorted([x for x in os.listdir(eval_config) if x.endswith(".ini")])
     eval_label = [x.removesuffix(".ini")[-4:] if len(x.removesuffix(".ini")) > 4 else x.removesuffix(".ini") for x in eval_label]
 
     metadata_arr1, rec = load_recon_binary(recon_file)

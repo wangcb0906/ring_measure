@@ -57,11 +57,11 @@ find_package(PCL 1.12 REQUIRED COMPONENTS
 # (TRACE, DEBUG, INFO, WARN, ERROR, CRITICAL, OFF)
 set(LOG_LEVEL INFO CACHE STRING "")
 add_compile_definitions(SPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_${LOG_LEVEL})
-
-add_compile_definitions(
-    SPDLOG_FMT_EXTERNAL
-)
-
+add_compile_definitions(SPDLOG_FMT_EXTERNAL)
+if(NOT RING_MEASURE_SAVE_PLY_TYPE)
+  set(RING_MEASURE_SAVE_PLY_TYPE RING_MEASURE_SAVE_BIN CACHE STRING "" FORCE)
+endif()
+add_compile_definitions(RING_MEASURE_SAVE_PLY_TYPE=${RING_MEASURE_SAVE_PLY_TYPE})
 if(MINGW)
 add_compile_definitions(
     PCL_NO_PRECOMPILE
@@ -73,6 +73,10 @@ endif()
 # ------------------------------------------------------------
 
 file(GLOB CORE_SHARED "src/*.cpp")
+if(UNIX AND NOT APPLE)
+    file(GLOB LINUX_SHARED "src/linux/*.cpp")
+    list(APPEND CORE_SHARED ${LINUX_SHARED})
+endif()
 add_library(${CORE_LIB} SHARED ${CORE_SHARED})
 
 target_include_directories(${CORE_LIB} PUBLIC 
@@ -140,7 +144,5 @@ endif()
 # cmake --build build -j --target ring_cali && ./ring_cali cali/20260622 -o auto -r 4_ND_20260622_4_19.ini
 # cmake --build build -j --target ring_cali_eval  && ./ring_cali_eval cali/20260622/auto auto_cali_eval -bm
 # python visual/eval_bin.py ./cali/20260622/auto_cali_eval/
-# ./ring_cali_eval cali/20260622/auto eval -e measure/20260326/ -b -t measure/20260326/config/11.ini
-# python visual/eval_bin.py measure/20260326/eval/ cali/20260622/auto
-# To check the quality of a construction, note that the scans are not well aligned.
-# ./merge cali/20260622/auto/GR_4_ND_20260622_4_19/In_veri_denoise/ \cali/20260622/auto/GR_4_ND_20260622_4_19/Out_veri_denoise/ cali/20260622/auto/GR_4_ND_20260622_4_19/combined 2
+# ./ring_cali_eval cali/20260622/auto eval -e measure/20260326/r1 -b -t measure/20260326/config/11.ini
+# python visual/eval_bin.py measure/20260326/r1/eval/ cali/20260622/auto

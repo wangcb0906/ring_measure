@@ -88,7 +88,11 @@ namespace {
             }
             SPDLOG_LOGGER_TRACE(logger, "Cluster sizes: {}", fmt::join(cluster_sizes, ", "));
             SPDLOG_LOGGER_TRACE(logger, "Saving the visualized clustering of normal to {}.", ply_path);
-            SPDLOG_EXEC(logger, spdl::trace, pcl::io::savePLYFileASCII(ply_path, *colored_cloud));
+            #if RING_MEASURE_SAVE_PLY_TYPE == RING_MEASURE_SAVE_BIN
+                SPDLOG_EXEC(logger, spdl::trace, pcl::io::savePLYFileBinary(ply_path, *colored_cloud));
+            #else
+                SPDLOG_EXEC(logger, spdl::trace, pcl::io::savePLYFileASCII(ply_path, *colored_cloud));
+            #endif
             kmeans_curv_thld = (centroids[0][0] + centroids[1][0]) / 2.0f;
             SPDLOG_LOGGER_TRACE(logger, "Curvature threshold determined by k-means: {}", kmeans_curv_thld);
         }
@@ -202,7 +206,11 @@ namespace {
         SPDLOG_LOGGER_TRACE(logger, "Size of differences: {}", diffs.size());
         SPDLOG_LOGGER_TRACE(logger, "Differences between adjacent centroids: {}", fmt::join(diffs, ", "));
         SPDLOG_LOGGER_TRACE(logger, "Saving the visualized clustering of normal to {}.", ply_path);
-        SPDLOG_EXEC(logger, spdl::trace, pcl::io::savePLYFileASCII(ply_path, *colored_cloud));
+        #if RING_MEASURE_SAVE_PLY_TYPE == RING_MEASURE_SAVE_BIN
+            SPDLOG_EXEC(logger, spdl::trace, pcl::io::savePLYFileBinary(ply_path, *colored_cloud));
+        #else
+            SPDLOG_EXEC(logger, spdl::trace, pcl::io::savePLYFileASCII(ply_path, *colored_cloud));
+        #endif
         // Take the average of the first two centroids as the normal threshold
         SPDLOG_LOGGER_DEBUG(logger, "Normal threshold determined by k-means: {} degrees", thld * 180.0f / M_PI);
         return thld;
@@ -253,7 +261,11 @@ namespace RingMeasure {
         SPDLOG_LOGGER_DEBUG(logger, "Writing the {} clusters of out denoised to: {}", ec_out_indices.size(), path);
         SPDLOG_EXEC(logger, spdl::debug, rm::writeSegmentation<pcl::PointXYZ>(input, ec_out_indices, path, prefix + "ECSeg_", 100, logger));
         SPDLOG_LOGGER_INFO(logger, "Saving denoised reconstruction to {}", path / (prefix + "EC_out.ply"));
-        SPDLOG_EXEC(logger, spdl::info, pcl::io::savePLYFileASCII(path / (prefix + "EC_out.ply"), *colored_ec_out));
+        #if RING_MEASURE_SAVE_PLY_TYPE == RING_MEASURE_SAVE_BIN
+            SPDLOG_EXEC(logger, spdl::info, pcl::io::savePLYFileBinary(path / (prefix + "EC_out.ply"), *colored_ec_out));
+        #else
+            SPDLOG_EXEC(logger, spdl::info, pcl::io::savePLYFileASCII(path / (prefix + "EC_out.ply"), *colored_ec_out));
+        #endif
       
         /*********************************************************************************************** */
         // The GPU Euclidean Cluster Extraction is slower than the CPU version.
@@ -466,11 +478,16 @@ namespace RingMeasure {
 
             SPDLOG_LOGGER_DEBUG(logger, "Saving the downsampled point cloud ({} points) with normals to {}",
                           input_with_normals->size(), path / (prefix + "normal.ply"));
-            SPDLOG_EXEC(logger, spdl::debug, pcl::io::savePLYFileASCII(path / (prefix + "normal.ply"), *input_with_normals));
 
             pcl::PointCloud <pcl::PointXYZRGB>::Ptr colored_cloud = reg.getColoredCloud ();
             SPDLOG_LOGGER_INFO(logger, "Saving the colored segmented point cloud to {}", path / (prefix + "segmented.ply"));
-            SPDLOG_EXEC(logger, spdl::info, pcl::io::savePLYFileASCII(path / (prefix + "segmented.ply"), *colored_cloud));
+            #if RING_MEASURE_SAVE_PLY_TYPE == RING_MEASURE_SAVE_BIN
+                SPDLOG_EXEC(logger, spdl::info, pcl::io::savePLYFileBinary(path / (prefix + "segmented.ply"), *colored_cloud));
+                SPDLOG_EXEC(logger, spdl::debug, pcl::io::savePLYFileBinary(path / (prefix + "normal.ply"), *input_with_normals));
+            #else
+                SPDLOG_EXEC(logger, spdl::debug, pcl::io::savePLYFileASCII(path / (prefix + "normal.ply"), *input_with_normals));
+                SPDLOG_EXEC(logger, spdl::info, pcl::io::savePLYFileASCII(path / (prefix + "segmented.ply"), *colored_cloud));
+            #endif
             if (segmentation_indices.size() < 2)
             {
               SPDLOG_LOGGER_ERROR(logger, "Failed to segment.");
@@ -610,12 +627,20 @@ namespace RingMeasure {
             if(lateral != nullptr)
             {
                 SPDLOG_LOGGER_INFO(logger, "Saving the lateral({} points) of the cylinder to {}", lateral->size(), path / (prefix + "lateral.ply"));
-                SPDLOG_EXEC(logger, spdl::info, pcl::io::savePLYFileASCII(path / (prefix + "lateral.ply"), *lateral));
+                #if RING_MEASURE_SAVE_PLY_TYPE == RING_MEASURE_SAVE_BIN
+                    SPDLOG_EXEC(logger, spdl::info, pcl::io::savePLYFileBinary(path / (prefix + "lateral.ply"), *lateral));
+                #else
+                    SPDLOG_EXEC(logger, spdl::info, pcl::io::savePLYFileASCII(path / (prefix + "lateral.ply"), *lateral));
+                #endif
             }
             if(base != nullptr)
             {
                 SPDLOG_LOGGER_INFO(logger, "Saving the base({} points) of the cylinder to {}", base->size(), path / (prefix + "base.ply"));
-                SPDLOG_EXEC(logger, spdl::info, pcl::io::savePLYFileASCII(path / (prefix + "base.ply"), *base));
+                #if RING_MEASURE_SAVE_PLY_TYPE == RING_MEASURE_SAVE_BIN
+                    SPDLOG_EXEC(logger, spdl::info, pcl::io::savePLYFileBinary(path / (prefix + "base.ply"), *base));
+                #else
+                    SPDLOG_EXEC(logger, spdl::info, pcl::io::savePLYFileASCII(path / (prefix + "base.ply"), *base));
+                #endif
             }
             return input_with_normals;
         } // end normalSegmentation

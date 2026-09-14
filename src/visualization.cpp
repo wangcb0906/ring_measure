@@ -99,7 +99,11 @@ namespace RingMeasure
         
         }
         SPDLOG_LOGGER_INFO(logger, "Saving the visualized curvature to {}.", ply_path);
-        pcl::io::savePLYFileASCII(ply_path, *colored_cloud);
+        #if RING_MEASURE_SAVE_PLY_TYPE == RING_MEASURE_SAVE_BIN
+            SPDLOG_EXEC(logger, spdlog::level::trace, pcl::io::savePLYFileBinary(ply_path, *colored_cloud));
+        #else
+            SPDLOG_EXEC(logger, spdlog::level::trace, pcl::io::savePLYFileASCII(ply_path, *colored_cloud));
+        #endif
     }
 
     void visualizeNormal(const pcl::PointCloud<pcl::PointNormal>::Ptr cloud,
@@ -140,7 +144,11 @@ namespace RingMeasure
         }
 
         SPDLOG_LOGGER_INFO(logger, "Saving the visualized max-min normalized normal to {}.", ply_path);
-        pcl::io::savePLYFileASCII(ply_path, *colored_cloud);
+        #if RING_MEASURE_SAVE_PLY_TYPE == RING_MEASURE_SAVE_BIN
+            SPDLOG_EXEC(logger, spdlog::level::trace, pcl::io::savePLYFileBinary(ply_path, *colored_cloud));
+        #else
+            SPDLOG_EXEC(logger, spdlog::level::trace, pcl::io::savePLYFileASCII(ply_path, *colored_cloud));
+        #endif
     }
 
     void
@@ -175,6 +183,10 @@ namespace RingMeasure
             }
         }
         SPDLOG_LOGGER_INFO(cali.getLogger(), "Saving the obliquity visualization to {}.", ply_path);
-        pcl::io::savePLYFileBinary(ply_path.string(), *clouds[0] + *clouds[1] + *clouds[2]);
+        #if RING_MEASURE_SAVE_PLY_TYPE == RING_MEASURE_SAVE_BIN
+            SPDLOG_EXEC(cali.getLogger(), spdlog::level::trace, pcl::io::savePLYFileBinary(ply_path.string(), *clouds[0] + *clouds[1] + *clouds[2]));
+        #else
+            SPDLOG_EXEC(cali.getLogger(), spdlog::level::trace, pcl::io::savePLYFileASCII(ply_path.string(), *clouds[0] + *clouds[1] + *clouds[2]));
+        #endif
     }
 }
