@@ -2,7 +2,8 @@
 
 #include <string>
 #include <filesystem>
-#include <pcl/point_types.h>
+#include <array>
+#include <iostream>
 namespace RingMeasure{
 
     using str = std::string;
@@ -28,8 +29,10 @@ namespace RingMeasure{
         ScanLocation::Out,
         ScanLocation::Under
     };
-
-    /// @brief Ellipse axis types for measurement calculations.
+    
+    /**
+     * @brief Ellipse axis types for measurement calculations.
+     */
     enum class AxisType
     {
         /// Major axis of the ellipse
@@ -56,6 +59,7 @@ namespace RingMeasure{
         }
         return "UNKNOWN";
     }
+
     /**
      * @brief Converts a string view to its corresponding ScanLocation enum value.
      * @param str String view representing the scan location.
@@ -73,6 +77,12 @@ namespace RingMeasure{
         /// Radreifen
         RR,
     };
+
+    /**
+     * @brief Converts a RingType enum value to its string representation.
+     * @param rt The RingType enum value.
+     * @return constexpr std::string_view String representation of the ring type.
+     */
     constexpr std::string_view ringTypeToString(RingType rt) {
         switch (rt) {
             case RingType::GR: return "GR";
@@ -81,6 +91,7 @@ namespace RingMeasure{
         }
         return "UNKNOWN";
     }
+
     /**
      * @brief Converts a string view to its corresponding RingType enum value.
      * @param str String view representing the ring type.
@@ -96,6 +107,7 @@ namespace RingMeasure{
         /// Translation calibration process type.
         TRANS,
     };
+
     /**
      * @brief Converts a ProcessType enum value to its string representation.
      * @param pt The ProcessType enum value.
@@ -108,6 +120,7 @@ namespace RingMeasure{
         }
         return "UNKNOWN";
     }
+
     /**
      * @brief Converts a string view to its corresponding ProcessType enum value.
      * @param str String view representing the process type.
@@ -123,6 +136,7 @@ namespace RingMeasure{
         /// Verification phase
         VERI,
     };
+
     /**
      * @brief Converts a PhaseType enum value to its string representation.
      * @param pt The PhaseType enum value.
@@ -135,6 +149,7 @@ namespace RingMeasure{
         }
         return "UNKNOWN";
     }
+
     /**
      * @brief Converts a string view to its corresponding PhaseType enum value.
      * @param str String view representing the phase type.
@@ -193,7 +208,8 @@ namespace RingMeasure{
 
     /**
      * @brief Configuration parameters for individual scan nodes.
-     */    struct ScanCfg
+     */    
+    struct ScanCfg
     {
         float view_angle{0.0f}; ///< View angle (va) in degrees
         float angle_corr{0.0f}; ///< Angle correction offset

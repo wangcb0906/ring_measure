@@ -133,6 +133,49 @@
                     "ignoreExisting": true
                 }
             ]
+        },
+
+        // How does the wine dbg work?
+        // The bash script will start the wine debugger and wait for a connection on dynamic port.
+        // The app socat connects the dynamic port to a fixed port (localhost:40780) and forwards the data.
+        // The gdb debugger will then connect to this fixed port and start debugging the program in VScode.
+        // Then everything behaves like a normal gdb debugging session, except that the program is running in wine.
+        // To modify the fixed port, change the port number in .vscode/start-wine-debug.sh and in this launch.json file.
+        // If you want to modify the program arguments, see line 33-38 in .vscode/start-wine-debug.sh for details.
+        // # To install socat:
+        // $ sudo pacman -S socat
+        // # To check if socat is installed:
+        // $ which socat
+        // # To test the port
+        // $ ss -lntp | grep -E '38885|40780'
+        // # To clean up the wine debugger process, run the following command:
+        // $ pkill -f socat && pkill -f winedbg
+        {
+            "name": "Winedbg ring_cali.exe",
+            "type": "cppdbg",
+            "request": "launch",
+
+            "program": "${workspaceFolder}/build-win/deploy/ring_cali.exe",
+            "cwd": "${workspaceFolder}/build-win/deploy",
+
+            "MIMode": "gdb",
+            "miDebuggerPath": "/usr/sbin/gdb",
+            "miDebuggerServerAddress": "localhost:40780",
+            "additionalSOLibSearchPath": "${workspaceFolder}/build-win/deploy",
+
+            "stopAtEntry": false,
+            "externalConsole": false,
+
+            "preLaunchTask": "Start Wine debugger",
+            "postDebugTask": "Stop Wine debugger",
+
+            "setupCommands": [
+                {
+                    "description": "Enable pretty printing",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                }
+            ]
         }
     ]
 }

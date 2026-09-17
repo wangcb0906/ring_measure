@@ -26,21 +26,26 @@ This projects calibrates the rings and generate the parameters, include rotation
 
 #### On Archlinux
 
-```
+``` shell
+# To build the dependencies for Archlinux, see requirements.md
 cmake -B build -DLOG_LEVEL=INFO -DCMAKE_BUILD_TYPE=Release
+# LOG_LEVEL = (TRACE, DEBUG, INFO, WARN, ERROR, CRITICAL, OFF)
+# CMAKE_BUILD_TYPE = (Deug, Release)
 cmake --build build --target ring_cali -j
 ```
  
 #### On Windows(Cross-compilation)
 
-```
+``` shell
 cmake -S . -B build-win -G "Unix Makefiles" -DCMAKE_TOOLCHAIN_FILE="$PWD/cmake/mingw-w64-x86_64.cmake"
-cmake --build build-win --target ring_cali -j
+# Note: Only the printed deployed dependencies are needed to run this algorithm on Windows.
+# The others could be omitted.
 cmake --build build-win --target deploy -j
 ```
 
 #### To build the document
-```
+
+``` shell
 doxygen
 cd latex
 pdflatex refman.tex
@@ -52,25 +57,25 @@ pdflatex refman.tex
 ### Executing program
 
 * To show help function of each application, run
-```
-./ring_cali
-./ring_cali_eval
-```
-
-## Help
-
-* To show help function of each application, run
-```
+``` shell
 ./ring_cali -h
 ./ring_cali_eval -h
 ```
 
-* To evaluate calibrations, run
-```
-python visual/eval_bin.py ./cali/20260622/result_cali_eval/
+## Help
+
+* To run a set of calibrations and evaluate them:
+``` shell
+./ring_cali cali/20260622 -o auto -p auto.ini
+./ring_cali_eval cali/20260622/auto auto_cali_eval -b
 ```
 
-* To enable debuggin mode. 
+* To visualize the evaluation, run
+``` python
+python visual/eval_bin.py ./cali/20260622/auto_cali_eval/
+```
+
+* To enable debugging mode. 
     * Compile the project with Debug mode.
     * Enable the break point with conditions.
     * Start the debugging mode you want in VScode.
@@ -78,21 +83,38 @@ python visual/eval_bin.py ./cali/20260622/result_cali_eval/
 
 * The calibration is structured in the following way:
 
-```
+``` shell
 cali/20260622/
-├── auto             # calibration with some parameters
-├── auto_cali_eval   # folder to evaluate the calibration of the same name
-├── auto.ini         # parameter to generate the calibration of the same name
-├── config           # all the config file, one for each ring
-├── input            # has all the scan images
-├── manual           # another calibration
-├── manual_cali_eval # another evaluation of calibration
-├── manual.ini       # another parameter of calibration
-└── system.ini       # the data from robot and camera and correction
+├── auto                           # calibration with automatic parameters
+│   ├── calibrations                   # calibration results
+│   ├── GR_3_ND_20260622_3_01          # result of calibration 3_01
+│   ├── GR_4_ND_20260622_4_19
+│   │   ├── 4_ND_20260622_4_19.bin         # system corrections in ASCII
+│   │   └── 4_ND_20260622_4_19.ini         # system corrections in bianry
+│   └── logs                           # calibration logs
+├── auto.ini                       # automatic parameters
+├── auto_cali_eval                 # evaluation of calibration auto
+│   ├── 3_ND_20260622_3_01         # result of calibration 3_01
+│   ├── 4_ND_20260622_4_19
+│   ├── recon.bin                  # result of all calibrations
+│   ├── scan.bin                   # same as previous, further to visualize with python
+│   └── visual                     # visualization results
+├── auto.ini
+├── config                         # ring configs to calibrate
+│   ├── 3_ND_20260622_3_01.ini         # configuration for ring 3_01
+│   └── 4_ND_20260622_4_19.ini
+├── input                          # input scans
+│   ├── ND_..._B0.tif                  # scan from inside
+│   ├── ND_..._B1.tif                  # scan from outside
+│   └── ND_..._B2.tif                  # scan from underneath
+├── manual                         # another calibration with manual parameters
+├── manual_cali_eval               # another evaluation
+├── manual.ini                     # manual parameters
+└── system.ini                     # system configuration
 ```
 
-* Examples of system.ini and ring.ini in *config*
-``` 
+* Examples of system.ini and ring.ini(3_ND_20260622_3_01.ini)
+``` ini
 [Robot] # system.ini
 # Configuration for the scan from inside
 angleI     = -50
@@ -131,6 +153,7 @@ x_pitch     = 22500.0
 unit       = "mm"
 mount      = 980.0
 
+# another ini file
 [Robot] # ring.ini
 xI = 855.0
 yI = 1500.0
@@ -170,4 +193,5 @@ Chongbiao Wang
 
 
 * 0.1
-    * Initial Release
+    * 2026.09.17 Deployment on Windows with Dll and C#
+    * 2026.09.03 Initial Release

@@ -4,12 +4,13 @@ cmake_minimum_required(VERSION 3.21)
 # Deployment directory
 # ============================================================
 file(MAKE_DIRECTORY "${DEPLOY_DIR}")
-
+find_program(OBJDUMP x86_64-w64-mingw32-objdump REQUIRED)
+find_program(STRIP x86_64-w64-mingw32-strip REQUIRED)
 
 # ============================================================
 # Copy executables
 # ============================================================
-foreach(APP IN ITEMS "${APP1}" "${APP2}")
+foreach(APP IN ITEMS "${APP1}" "${APP2}" "${DYN}" "${AUX}")
     if(NOT EXISTS "${APP}")
         message(FATAL_ERROR "Executable not found: ${APP}")
     endif()
@@ -26,13 +27,13 @@ endforeach()
 # ============================================================
 message(STATUS "Runtime DLL search directory:")
 message(STATUS "  ${MINGW_BIN_DIR}")
-find_program(OBJDUMP x86_64-w64-mingw32-objdump REQUIRED)
-find_program(STRIP x86_64-w64-mingw32-strip REQUIRED)
 set(RESOLVED_DEPS)
-set(PENDING_FILES "${APP1};${APP2}")
+get_filename_component(APP_NAME "${DYN}" NAME)
+set(PENDING_FILES "${DEPLOY_DIR}/${APP_NAME}")
 
 while(PENDING_FILES)
     list(POP_FRONT PENDING_FILES CURRENT_FILE)
+    list(APPEND RESOLVED_DEPS "${CURRENT_FILE}")
     execute_process(
         COMMAND "${OBJDUMP}" -p "${CURRENT_FILE}"
         OUTPUT_VARIABLE OBJDUMP_OUTPUT
@@ -82,78 +83,48 @@ foreach(DEP IN LISTS RESOLVED_DEPS)
     file(COPY "${DEP}" DESTINATION "${DEPLOY_DIR}" )
 endforeach()
 
-
-# ============================================================
-# MinGW runtime DLLs
-# ============================================================
-if(MINGW)
-    set(MINGW_RUNTIME_DLL_NAMES
-        libstdc++-6.dll libgcc_s_seh-1.dll libwinpthread-1.dll)
-
-    set(MINGW_RUNTIME_DLLS)
-    foreach(DLL_NAME IN LISTS MINGW_RUNTIME_DLL_NAMES)
-        find_file(
-            MINGW_RUNTIME_DLL NAMES "${DLL_NAME}"
-            PATHS ${MINGW_BIN_DIR} "${BUILD_DIR}" NO_DEFAULT_PATH
-        )
-        if(NOT MINGW_RUNTIME_DLL)
-            message(FATAL_ERROR
-                "Could not find required MinGW runtime DLL: " "${DLL_NAME}"
-            )
-        endif()
-        list(APPEND MINGW_RUNTIME_DLLS "${MINGW_RUNTIME_DLL}")
-    endforeach()
-
-    message(STATUS "")
-    message(STATUS "MinGW runtime dependencies:")
-
-    foreach(DLL IN LISTS MINGW_RUNTIME_DLLS)
-        get_filename_component( DLL_NAME "${DLL}" NAME)
-        message(STATUS "  Deploying: ${DLL_NAME}")
-        file(COPY "${DLL}" DESTINATION "${DEPLOY_DIR}")
-        unset(MINGW_RUNTIME_DLL CACHE)
-    endforeach()
-
-endif()
-
-
-# ============================================================
-# Report unresolved dependencies
-# ============================================================
-if(UNRESOLVED_DEPS)
-    message(WARNING "")
-    message(WARNING "The following runtime dependencies could not be resolved:")
-    foreach(DEP IN LISTS UNRESOLVED_DEPS)
-        message(WARNING "  ${DEP}")
-    endforeach()
-endif()
-
 # ============================================================
 # Strip binaries to reduce deployment size
-# ============================================================
-if(STRIP)
-    message(STATUS "")
-    message(STATUS "Stripping debug symbols from binaries...")
-    file(GLOB_RECURSE BINARIES_TO_STRIP "${DEPLOY_DIR}/*.dll" "${DEPLOY_DIR}/*.exe")
-    foreach(BIN IN LISTS BINARIES_TO_STRIP)
-        execute_process(COMMAND "${STRIP}" "${BIN}" OUTPUT_QUIET ERROR_QUIET)
-    endforeach()
-endif()
-
-# ============================================================
 # Deployment summary
 # ============================================================
-execute_process(
-    COMMAND du -sb "${DEPLOY_DIR}"
-    OUTPUT_VARIABLE DEPLOY_SIZE
-    OUTPUT_STRIP_TRAILING_WHITESPACE
-)
-string(REGEX MATCH "^[0-9]+" DEPLOY_SIZE_BYTES "${DEPLOY_SIZE}")
-math(EXPR DEPLOY_SIZE_MB "${DEPLOY_SIZE_BYTES} / 1024 / 1024" )
+set(TRACKED_FILENAMES)
+# Collect filenames of resolved dependencies & MinGW runtimes only
+foreach(BIN IN LISTS RESOLVED_DEPS MINGW_RUNTIME_DLLS)
+    if(EXISTS "${BIN}")
+        get_filename_component(FNAME "${BIN}" NAME)
+        list(APPEND TRACKED_FILENAMES "${FNAME}")
+    endif()
+endforeach()
+list(REMOVE_DUPLICATES TRACKED_FILENAMES)
+
+# if(STRIP)
+#     message(STATUS "")
+#     message(STATUS "Stripping debug symbols from binaries...")
+# endif()
+
+set(DEPLOY_SIZE_BYTES 0)
+foreach(FNAME IN LISTS TRACKED_FILENAMES)
+    set(DEPLOYED_BIN "${DEPLOY_DIR}/${FNAME}")
+
+    if(EXISTS "${DEPLOYED_BIN}")
+        # Strip if enabled
+        # if(STRIP)
+        #     execute_process(COMMAND "${STRIP}" "${DEPLOYED_BIN}" OUTPUT_QUIET ERROR_QUIET)
+        # endif()
+        
+        # Calculate size for summary (excluding APP1 and APP2)
+        file(SIZE "${DEPLOYED_BIN}" FILE_SIZE)
+        math(EXPR DEPLOY_SIZE_BYTES "${DEPLOY_SIZE_BYTES} + ${FILE_SIZE}")
+    endif()
+endforeach()
+# Calculate size with 1 decimal place precision and rounding
+math(EXPR DEPLOY_SIZE_TENTHS "(${DEPLOY_SIZE_BYTES} * 10 + 524288) / 1048576")
+math(EXPR DEPLOY_SIZE_INT "${DEPLOY_SIZE_TENTHS} / 10")
+math(EXPR DEPLOY_SIZE_DEC "${DEPLOY_SIZE_TENTHS} % 10")
 
 message(STATUS "========================================")
 message(STATUS "Deployment completed")
-message(STATUS "Deployment size: ${DEPLOY_SIZE_MB} MB")
+message(STATUS "Deployment size: ${DEPLOY_SIZE_INT}.${DEPLOY_SIZE_DEC} MB")
 message(STATUS "Directory:")
 message(STATUS "  ${DEPLOY_DIR}")
 message(STATUS "========================================")

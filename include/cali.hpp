@@ -2,8 +2,11 @@
 
 #include "config.hpp"
 #include "param.hpp"
+#include "log.hpp"
 #include <Eigen/Core>
 #include <spdlog/spdlog.h>
+#include "spdlog/sinks/stdout_color_sinks.h"
+#include <spdlog/sinks/basic_file_sink.h>
 #include <pcl/point_types.h>
 #include <pcl/point_cloud.h>
 
@@ -67,7 +70,34 @@ namespace RingMeasure {
             using ScanMetricsArray = std::array<float, static_cast<size_t>(ScanMetrics::NUM)>;
 
             std::shared_ptr<spdlog::logger> getLogger() const { return logger; }
-            void setLogger(const std::shared_ptr<spdlog::logger> &logger_) { logger = logger_; }
+            void setLogger(const std::shared_ptr<spdlog::logger> &logger_) { 
+                logger = logger_;
+                logger->flush_on(spdlog::level::err);
+            }
+
+            void setLogger(const std::string &logger_name, const fs::path &log_path, bool overwrite) {
+                // Bind PCL logger to stderr
+                auto handler = createPclLogHandler(spdlog::stderr_color_mt("stderr_logger"));
+                pcl::console::Logger::getInstance().setCallback(handler);
+                logger = spdlog::basic_logger_mt(logger_name, log_path.string(), overwrite);
+                logger->set_level(spdlog::level::trace);
+                logger->set_pattern("[%Y-%m-%d %H:%M:%S] [%l] [%s:%#] %v");
+                logger->flush_on(spdlog::level::err);
+            }
+
+            void getLoggerInfo(std::string& name, std::string& path) const {
+                if (!logger) return;
+                name.clear();
+                path.clear();
+                name = logger->name();
+                
+                if (!logger->sinks().empty()) {
+                    auto file_sink = std::dynamic_pointer_cast<spdlog::sinks::basic_file_sink_mt>(logger->sinks()[0]);
+                    if (file_sink) {
+                        path = file_sink->filename();
+                    }
+                }
+            }
 
             ScanLocation scanLoc() const { return scan_loc; }
             
@@ -88,6 +118,7 @@ namespace RingMeasure {
             { 
                 system = system_; 
                 system_ready = true;
+                system.robot.table_h -= system.robot.wedge_h;
                 if(measure_ready)
                     mid_height = measure.ring.h/2.0 + system.robot.table_h;
                 pitch_scale = system.sensor.z_pitch/1.0e5;
@@ -191,6 +222,9 @@ namespace RingMeasure {
 
             rm::ParamTune getParam() const { return param; }
             void setParam(const rm::ParamTune &param_) { param = param_; }
+
+            void setStatus(bool newStatus) { status = newStatus; }
+            bool getStatus() const { return status; }
 
         protected:
             /**
@@ -304,5 +338,6 @@ namespace RingMeasure {
             rm::ProcessType process_type;            ///< Active process type
             bool measure_ready = false;              ///< Flag indicating measure configuration readiness
             bool system_ready = false;               ///< Flag indicating system configuration readiness
+            bool status = true;
     };
 }

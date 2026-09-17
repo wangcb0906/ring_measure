@@ -60,6 +60,9 @@ def plot_eval(path_cali, path_eval, recon_file, scan_file):
     metadata_arr1, rec = load_recon_binary(recon_file)
     metadata_arr2, scan = load_scan_binary(scan_file)
 
+    visual_dir = os.path.join(path_eval, "visual")
+    os.makedirs(visual_dir, exist_ok=True)
+
     assert np.allclose(metadata_arr1, metadata_arr2), "Metadata mismatch between recon and scan files"
 
     da = float(metadata_arr1[0])
@@ -142,7 +145,7 @@ def plot_eval(path_cali, path_eval, recon_file, scan_file):
         axes[0][2].legend()
         axes[0][2].grid()
         plt.tight_layout()
-        fig.savefig(os.path.join(path_eval, f"eval_cali_{cali_label[cali]}.png"), dpi=100)
+        fig.savefig(os.path.join(visual_dir, f"eval_cali_{cali_label[cali]}.png"), dpi=100)
         plt.close()
 
     funcs = [np.mean, np.max]
@@ -178,7 +181,7 @@ def plot_eval(path_cali, path_eval, recon_file, scan_file):
         handles, labels = axes[0].get_legend_handles_labels()
         fig.legend(handles, labels, loc='upper center', bbox_to_anchor=(0.5, -0.05), ncol=2)
         plt.subplots_adjust(bottom=0.10, wspace=0.05)
-        fig.savefig(os.path.join(path_eval, f"cali_cmp_{desc_str.lower()}.png"), dpi=100, bbox_inches="tight")
+        fig.savefig(os.path.join(visual_dir, f"cali_cmp_{desc_str.lower()}.png"), dpi=100, bbox_inches="tight")
         plt.close()
 
 def main():

@@ -251,20 +251,21 @@ namespace RingMeasure {
             SPDLOG_LOGGER_INFO(logger, "Euclidean Cluster Extraction completed in {} ms", 
                 std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count());
         }
-      
-        pcl::PointCloud<pcl::PointXYZRGB>::Ptr colored_ec_out = rm::colorizeClusters(input, ec_out_indices);
-      
+        
+        #if SPDLOG_LEVEL_DEBUG >= ACTIVE_LOG_LEVEL
+            pcl::PointCloud<pcl::PointXYZRGB>::Ptr colored_ec_out = rm::colorizeClusters(input, ec_out_indices);
+        #endif
         std::sort(ec_out_indices.begin(), ec_out_indices.end(), [](const pcl::PointIndices& a, const pcl::PointIndices& b) {
             return a.indices.size() > b.indices.size(); // Sort in descending order of cluster size
         });
       
         SPDLOG_LOGGER_DEBUG(logger, "Writing the {} clusters of out denoised to: {}", ec_out_indices.size(), path);
         SPDLOG_EXEC(logger, spdl::debug, rm::writeSegmentation<pcl::PointXYZ>(input, ec_out_indices, path, prefix + "ECSeg_", 100, logger));
-        SPDLOG_LOGGER_INFO(logger, "Saving denoised reconstruction to {}", path / (prefix + "EC_out.ply"));
+        SPDLOG_LOGGER_DEBUG(logger, "Saving denoised reconstruction to {}", path / (prefix + "EC_out.ply"));
         #if RING_MEASURE_SAVE_PLY_TYPE == RING_MEASURE_SAVE_BIN
-            SPDLOG_EXEC(logger, spdl::info, pcl::io::savePLYFileBinary(path / (prefix + "EC_out.ply"), *colored_ec_out));
+            SPDLOG_EXEC(logger, spdl::debug, pcl::io::savePLYFileBinary(path / (prefix + "EC_out.ply"), *colored_ec_out));
         #else
-            SPDLOG_EXEC(logger, spdl::info, pcl::io::savePLYFileASCII(path / (prefix + "EC_out.ply"), *colored_ec_out));
+            SPDLOG_EXEC(logger, spdl::debug, pcl::io::savePLYFileASCII(path / (prefix + "EC_out.ply"), *colored_ec_out));
         #endif
       
         /*********************************************************************************************** */
@@ -311,7 +312,17 @@ namespace RingMeasure {
             }
             cv::Mat labels, centers;
             cv::TermCriteria criteria(cv::TermCriteria::EPS + cv::TermCriteria::COUNT, 1000, 1.0);
-            cv::kmeans(feature, k, labels, criteria, 3, cv::KMEANS_PP_CENTERS, centers);
+            status = false;
+            try {
+                cv::kmeans(feature, k, labels, criteria, 3, cv::KMEANS_PP_CENTERS, centers);
+                status = true;
+            } catch (const std::exception& e) {
+                SPDLOG_LOGGER_ERROR(logger, "Kmeans failed: {}", e.what());
+                return nullptr;
+            } catch (...) {
+                SPDLOG_LOGGER_ERROR(logger, "Kmeans failed due to an unknown error.");
+                return nullptr;
+            }
             cv::Point max_loc;
             cv::minMaxLoc(centers, nullptr, nullptr, nullptr, &max_loc);
             int target = max_loc.y; // the cluster with the largest size
@@ -377,9 +388,6 @@ namespace RingMeasure {
         pcl::PointCloud<pcl::PointNormal>::Ptr& base)
         {
             auto params = getParam().reg_growing;
-            // get the logger system
-            // auto logger = spdlog::get("Cali");
-            namespace spdl=spdl;
             pcl::PointCloud <pcl::Normal>::Ptr normals (new pcl::PointCloud <pcl::Normal>);
             pcl::NormalEstimation<pcl::PointXYZ, pcl::Normal> normal_estimator;
             // set the search method for the normal estimation
@@ -393,7 +401,17 @@ namespace RingMeasure {
             // which is a requirement for many applications.
             normal_estimator.setViewPoint (0.0f, mid_height, 0.0f);
             // normal_estimator.setKSearch (500);
-            normal_estimator.compute (*normals);
+            status = false;
+            try {
+                normal_estimator.compute (*normals);
+                status = true;
+            } catch (const std::exception& e) {
+                SPDLOG_LOGGER_ERROR(logger, "Normal estimation failed: {}", e.what());
+                return nullptr;
+            } catch (...) {
+                SPDLOG_LOGGER_ERROR(logger, "Normal estimation failed due to an unknown error.");
+                return nullptr;
+            }
             // Flip every normal to point AWAY from (0,cynlinder_center,0)
             for (auto& n : normals->points) {
                 n.normal_x = -n.normal_x;
@@ -440,7 +458,7 @@ namespace RingMeasure {
             } else 
             {
                 SPDLOG_LOGGER_ERROR(logger, "Invalid curvature threshold type: {}", static_cast<int>(params.curvature_type));
-                exit(EXIT_FAILURE);
+                return nullptr;
             }
 
             if(params.normal_type == OperationMode::MANUAL)
@@ -455,7 +473,7 @@ namespace RingMeasure {
             } else 
             {
                 SPDLOG_LOGGER_ERROR(logger, "Invalid smoothness threshold type: {}", static_cast<int>(params.normal_type));
-                exit(EXIT_FAILURE);
+                return nullptr;
             }
 
             SPDLOG_EXEC(logger, spdl::debug, visualizeCurvature(input_with_normals, curv_thld, 
@@ -466,7 +484,17 @@ namespace RingMeasure {
                 path / (prefix + "normal_normalized_visualization.ply"), logger));
             
             std::vector <pcl::PointIndices> segmentation_indices;
-            reg.extract (segmentation_indices);
+            status = false;
+            try {
+                reg.extract (segmentation_indices);
+                status = true;
+            } catch (const std::exception& e) {
+                SPDLOG_LOGGER_ERROR(logger, "Region growing failed: {}", e.what());
+                return nullptr;
+            } catch (...) {
+                SPDLOG_LOGGER_ERROR(logger, "Region growing failed due to an unknown error.");
+                return nullptr;
+            }
 
             std::sort(segmentation_indices.begin(), segmentation_indices.end(),
                      [](const pcl::PointIndices& a, const pcl::PointIndices& b) {
@@ -490,10 +518,15 @@ namespace RingMeasure {
             #endif
             if (segmentation_indices.size() < 2)
             {
-              SPDLOG_LOGGER_ERROR(logger, "Failed to segment.");
-              exit(EXIT_FAILURE);
+                status = false;
+                SPDLOG_LOGGER_ERROR(logger, "Failed to apply ECSegmentation: not enough segments found.");
+                SPDLOG_LOGGER_ERROR(logger, "Turn the parameters to manual mode and set the curvature threshold and smoothness threshold manually.");
+                return nullptr;
             }
-            
+
+            pcl::PointIndices::Ptr lateral_indices(new pcl::PointIndices);
+            pcl::PointIndices::Ptr base_indices(new pcl::PointIndices);
+
             if (scan_loc != rm::ScanLocation::Under){
                 // select the cluster lateral and the base
                 int lateral_idx = 0, base_idx = 1;
@@ -508,26 +541,9 @@ namespace RingMeasure {
                 {
                     std::swap(lateral_idx, base_idx);
                 }
-     
-                // Extract the lateral and base clusters 
-                pcl::ExtractIndices<pcl::PointNormal> extract;
-                extract.setInputCloud(input_with_normals);
-     
-                if(lateral != nullptr){
-                    // lateral
-                    pcl::PointIndices::Ptr selected_indices_ptr(new pcl::PointIndices(segmentation_indices[lateral_idx]));
-                    extract.setIndices(selected_indices_ptr);
-                    extract.setNegative(false); // Keep only the specified indices
-                    extract.filter(*lateral);
-                }
+                lateral_indices = pcl::make_shared<pcl::PointIndices>(segmentation_indices[lateral_idx]);
+                base_indices = pcl::make_shared<pcl::PointIndices>(segmentation_indices[base_idx]);
 
-                if(base != nullptr){
-                    // base
-                    pcl::PointIndices::Ptr selected_indices_ptr(new pcl::PointIndices(segmentation_indices[base_idx]));
-                    extract.setIndices(selected_indices_ptr);
-                    extract.setNegative(false); // Keep only the specified indices
-                    extract.filter(*base);
-                }
             } else 
             // Processing of segmentation for the underneath scan.
             // First cluster the segmengts according to the size of the segmengts,
@@ -551,7 +567,17 @@ namespace RingMeasure {
                 }
                 cv::Mat labels, centers;
                 cv::TermCriteria criteria(cv::TermCriteria::EPS + cv::TermCriteria::COUNT, 1000, 1.0);
-                cv::kmeans(feature, k, labels, criteria, 3, cv::KMEANS_PP_CENTERS, centers);
+                status = false;
+                try {
+                    cv::kmeans(feature, k, labels, criteria, 3, cv::KMEANS_PP_CENTERS, centers);
+                    status = true;
+                } catch (const std::exception& e) {
+                    SPDLOG_LOGGER_ERROR(logger, "Kmeans failed: {}", e.what());
+                    return nullptr;
+                } catch (...) {
+                    SPDLOG_LOGGER_ERROR(logger, "Kmeans failed due to an unknown error.");
+                    return nullptr;
+                }
                 // This cluster is to discard.
                 cv::Point min_loc;
                 cv::minMaxLoc(centers, nullptr, nullptr, &min_loc, nullptr);
@@ -576,7 +602,17 @@ namespace RingMeasure {
                 cv::TermCriteria criteria_y(cv::TermCriteria::EPS + cv::TermCriteria::COUNT, 1000, 1.0);
                 // Here k=2, because we have base and lateral
                 // Set the number of tries to 3, and select the best result
-                cv::kmeans(feature_y, 2, labels_y, criteria_y, 3, cv::KMEANS_PP_CENTERS, centers_y);
+                status = false;
+                try {
+                    cv::kmeans(feature_y, 2, labels_y, criteria_y, 3, cv::KMEANS_PP_CENTERS, centers_y);
+                    status = true;
+                } catch (const std::exception& e) {
+                    SPDLOG_LOGGER_ERROR(logger, "Kmeans failed: {}", e.what());
+                    return nullptr;
+                } catch (...) {
+                    SPDLOG_LOGGER_ERROR(logger, "Kmeans failed due to an unknown error.");
+                    return nullptr;
+                }
                 // The cluster with the largest y coordinate is the lateral, and the other is the base.
                 double y1 = centers_y.at<float>(0, 0);
                 double y2 = centers_y.at<float>(1, 0);
@@ -588,8 +624,6 @@ namespace RingMeasure {
                 }
                 SPDLOG_LOGGER_INFO(logger, "The y coordinate of the lateral and base clusters are: {} and {}", y1, y2);
 
-                pcl::PointIndices::Ptr lateral_indices(new pcl::PointIndices);
-                pcl::PointIndices::Ptr base_indices(new pcl::PointIndices);
                 for (int i = 0; i < target_clusters.size(); ++i)
                 {   
                     SPDLOG_LOGGER_DEBUG(logger, "The y coordinate of the segment {} is: {}, in cluster {}", i, feature_y.at<float>(i, 0), labels_y.at<int>(i, 0));
@@ -609,38 +643,13 @@ namespace RingMeasure {
                                                      target_clusters[i].indices.end());
                     }
                 }
+            }
 
-                // Extract the lateral and the base clusters
-                pcl::ExtractIndices<pcl::PointNormal> extract;
-                extract.setInputCloud(input_with_normals);
-                if(lateral != nullptr){
-                    extract.setIndices(lateral_indices);
-                    extract.setNegative(false); // Keep only the specified indices
-                    extract.filter(*lateral);
-                }
-                if(base != nullptr){
-                    extract.setIndices(base_indices);
-                    extract.setNegative(false); // Keep only the specified indices
-                    extract.filter(*base);
-                }
+            if(lateral != nullptr){
+                pcl::copyPointCloud(*input_with_normals, *lateral_indices, *lateral);
             }
-            if(lateral != nullptr)
-            {
-                SPDLOG_LOGGER_INFO(logger, "Saving the lateral({} points) of the cylinder to {}", lateral->size(), path / (prefix + "lateral.ply"));
-                #if RING_MEASURE_SAVE_PLY_TYPE == RING_MEASURE_SAVE_BIN
-                    SPDLOG_EXEC(logger, spdl::info, pcl::io::savePLYFileBinary(path / (prefix + "lateral.ply"), *lateral));
-                #else
-                    SPDLOG_EXEC(logger, spdl::info, pcl::io::savePLYFileASCII(path / (prefix + "lateral.ply"), *lateral));
-                #endif
-            }
-            if(base != nullptr)
-            {
-                SPDLOG_LOGGER_INFO(logger, "Saving the base({} points) of the cylinder to {}", base->size(), path / (prefix + "base.ply"));
-                #if RING_MEASURE_SAVE_PLY_TYPE == RING_MEASURE_SAVE_BIN
-                    SPDLOG_EXEC(logger, spdl::info, pcl::io::savePLYFileBinary(path / (prefix + "base.ply"), *base));
-                #else
-                    SPDLOG_EXEC(logger, spdl::info, pcl::io::savePLYFileASCII(path / (prefix + "base.ply"), *base));
-                #endif
+            if(base != nullptr){
+                pcl::copyPointCloud(*input_with_normals, *base_indices, *base);
             }
             return input_with_normals;
         } // end normalSegmentation

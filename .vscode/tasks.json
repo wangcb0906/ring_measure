@@ -77,6 +77,37 @@
             },
             "problemMatcher": ["$gcc"],
             "detail": "Task generated to build the project via CMake."
+        },
+        {
+            "label": "Start Wine debugger",
+            "type": "shell",
+            "command": "${workspaceFolder}/.vscode/start-wine-debug.sh",
+            "isBackground": true,
+            "problemMatcher": [
+                {
+                    "owner": "wine-debugger",
+                    "pattern": {
+                        "regexp": ".*"
+                    },
+                    "background": {
+                        "activeOnStart": true,
+                        "beginsPattern": "Starting Wine debugger\\.\\.\\.",
+                        "endsPattern": "GDB proxy ready on localhost:40780"
+                    }
+                }
+            ]
+        },
+        // {
+        //     "label": "Start Wine debugger",
+        //     "type": "shell",
+        //     "command": "${workspaceFolder}/.vscode/start-wine-debug.sh",
+        //     "problemMatcher": []
+        // },
+        {
+            "label": "Stop Wine debugger",
+            "type": "shell",
+            "command": "${workspaceFolder}/.vscode/stop-wine-debug.sh",
+            "problemMatcher": []
         }
     ]
 }

@@ -1,10 +1,17 @@
 cmake_minimum_required(VERSION 3.16 FATAL_ERROR)
 project(RingMeasurement)
 
+if(MINGW)
+# Force Eigen to use NDEBUG and disable debug checks to avoid runtime errors
+add_definitions(-DEIGEN_NO_DEBUG -DNDEBUG)
+endif()
+
 set(CALI ring_cali)
 set(EVALUATION ring_cali_eval)
 set(MERGE merge)
 set(CORE_LIB core_shared)
+set(CORE core)
+set(HELPER_LIB rm_helper)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -40,19 +47,20 @@ else()
     set(JSONCPP_LIBRARY PkgConfig::JsonCpp)
 endif()
 
-# Request ALL required PCL modules here
-find_package(PCL 1.12 REQUIRED COMPONENTS 
-    common 
-    io 
-    filters 
-    segmentation 
-    search 
-    features 
-    kdtree 
+set(RING_MEASURE_PCL_COMPONENTS
+    common
+    io
+    filters
+    segmentation
+    search
+    features
+    kdtree
     sample_consensus
     surface
     ml
 )
+# Request ALL required PCL modules here
+find_package(PCL 1.12 REQUIRED COMPONENTS ${RING_MEASURE_PCL_COMPONENTS})
 
 # (TRACE, DEBUG, INFO, WARN, ERROR, CRITICAL, OFF)
 set(LOG_LEVEL INFO CACHE STRING "")
@@ -63,35 +71,74 @@ if(NOT RING_MEASURE_SAVE_PLY_TYPE)
 endif()
 add_compile_definitions(RING_MEASURE_SAVE_PLY_TYPE=${RING_MEASURE_SAVE_PLY_TYPE})
 if(MINGW)
-add_compile_definitions(
-    PCL_NO_PRECOMPILE
-)
+    add_compile_definitions(
+        PCL_NO_PRECOMPILE
+    )
 endif()
 
 # ------------------------------------------------------------
 # Core library
 # ------------------------------------------------------------
+file(GLOB CORE_SHARED "src/core/*.cpp")
+if(MINGW)
+    set(PCL_EXCLUDED_STATIC_LIBS)
+    foreach(COMPONENT IN LISTS RING_MEASURE_PCL_COMPONENTS)
+        list(APPEND PCL_EXCLUDED_STATIC_LIBS
+            "-Wl,--exclude-libs,libpcl_${COMPONENT}.a"
+        )
+    endforeach()
+    # Transitive PCL libraries used by the requested components
+    list(APPEND PCL_EXCLUDED_STATIC_LIBS
+        "-Wl,--exclude-libs,libpcl_octree.a"
+        "-Wl,--exclude-libs,libpcl_io_ply.a"
+    )
+    list(REMOVE_DUPLICATES PCL_EXCLUDED_STATIC_LIBS)
+    message(STATUS
+        "PCL static libraries excluded from DLL exports: "
+        "${PCL_EXCLUDED_STATIC_LIBS}"
+    )
 
-file(GLOB CORE_SHARED "src/*.cpp")
-if(UNIX AND NOT APPLE)
-    file(GLOB LINUX_SHARED "src/linux/*.cpp")
-    list(APPEND CORE_SHARED ${LINUX_SHARED})
+    add_library(${CORE} STATIC ${CORE_SHARED})
+    target_link_options(${CORE} PRIVATE
+        ${PCL_EXCLUDED_STATIC_LIBS}
+    )
+
+    add_library(${CORE_LIB} SHARED src/export/export.cpp)
+    target_include_directories(${CORE_LIB} PUBLIC 
+        ${CMAKE_CURRENT_SOURCE_DIR}/include/export)
+    target_link_libraries(${CORE_LIB} PRIVATE ${CORE})
+    target_link_options(${CORE_LIB} PRIVATE
+        ${PCL_EXCLUDED_STATIC_LIBS}
+    )
+
+    set(CORE_LINK ${CORE})
+else()
+    file(GLOB LINUX_SOURCES "src/linux/*.cpp")
+    add_library(${CORE_LIB} SHARED ${CORE_SHARED} ${LINUX_SOURCES})
+
+    set(CORE_LINK ${CORE_LIB})
 endif()
-add_library(${CORE_LIB} SHARED ${CORE_SHARED})
-
-target_include_directories(${CORE_LIB} PUBLIC 
+target_include_directories(${CORE_LINK} PUBLIC 
                            ${CMAKE_CURRENT_SOURCE_DIR}/include
                            ${PCL_INCLUDE_DIRS}
                            ${OpenCV_INCLUDE_DIRS}
                            )
-
-target_link_libraries(${CORE_LIB} PUBLIC
+target_link_libraries(${CORE_LINK} PUBLIC
                       ${OpenCV_LIBS}
                       ${PCL_LIBRARIES}
                       spdlog::spdlog
                       ${JSONCPP_LIBRARY}
                       TIFF::tiff
-                       )
+                      )
+
+# ------------------------------------------------------------
+# Helper library
+# ------------------------------------------------------------
+
+file(GLOB HELPER_SHARED "src/aux/*.cpp")
+add_library(${HELPER_LIB} SHARED ${HELPER_SHARED})
+target_include_directories(${HELPER_LIB} PUBLIC 
+                           ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
 # ------------------------------------------------------------
 # Applications
@@ -99,10 +146,10 @@ target_link_libraries(${CORE_LIB} PUBLIC
 
 set(APP_DIR "src/application")
 add_executable (${CALI} ${APP_DIR}/ring_cali.cpp)
-target_link_libraries(${CALI} PRIVATE ${CORE_LIB})
+target_link_libraries(${CALI} PRIVATE ${CORE_LINK} ${HELPER_LIB})
 
 add_executable(${EVALUATION} ${APP_DIR}/ring_cali_eval.cpp)
-target_link_libraries(${EVALUATION} PRIVATE ${CORE_LIB})
+target_link_libraries(${EVALUATION} PRIVATE ${CORE_LINK} ${HELPER_LIB})
 
 if(UNIX AND NOT APPLE)
     find_package(OpenMP REQUIRED)
@@ -110,7 +157,7 @@ if(UNIX AND NOT APPLE)
     add_executable(${MERGE} ${APP_DIR}/merge.cpp)
     target_include_directories(${MERGE} PRIVATE ${ImageMagick_INCLUDE_DIRS})
     target_link_libraries(${MERGE} PRIVATE ${ImageMagick_LIBRARIES} OpenMP::OpenMP_CXX)
-    target_compile_options(merge PRIVATE ${ImageMagick_CFLAGS_OTHER})
+    target_compile_options(${MERGE} PRIVATE ${ImageMagick_CFLAGS_OTHER})
 endif()
 
 # ------------------------------------------------------------
@@ -124,6 +171,8 @@ if(MINGW)
         COMMAND ${CMAKE_COMMAND}
             "-DAPP1=$<TARGET_FILE:${CALI}>"
             "-DAPP2=$<TARGET_FILE:${EVALUATION}>"
+            "-DDYN=$<TARGET_FILE:${CORE_LIB}>"
+            "-DAUX=$<TARGET_FILE:${HELPER_LIB}>"
             "-DDEPLOY_DIR=${DEPLOY_DIR}"
             "-DMINGW_BIN_DIR=${MINGW_BIN_DIR}"
             "-DMINGW=${MINGW}"
@@ -131,6 +180,9 @@ if(MINGW)
         DEPENDS
             ${CALI}
             ${EVALUATION}
+            ${CORE}
+            ${CORE_LIB}
+            ${HELPER_LIB}
         COMMENT "Collecting runtime DLL dependencies..."
     )
 endif()
@@ -142,7 +194,7 @@ endif()
 # cmake --build build -j --target ring_cali --clean-first
 # To start a test
 # cmake --build build -j --target ring_cali && ./ring_cali cali/20260622 -o auto -r 4_ND_20260622_4_19.ini
-# cmake --build build -j --target ring_cali_eval  && ./ring_cali_eval cali/20260622/auto auto_cali_eval -bm
+# cmake --build build -j --target ring_cali_eval  && ./ring_cali_eval cali/20260622/auto auto_cali_eval -b
 # python visual/eval_bin.py ./cali/20260622/auto_cali_eval/
 # ./ring_cali_eval cali/20260622/auto eval -e measure/20260326/r1 -b -t measure/20260326/config/11.ini
 # python visual/eval_bin.py measure/20260326/r1/eval/ cali/20260622/auto

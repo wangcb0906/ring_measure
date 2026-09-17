@@ -122,8 +122,8 @@ main (int argc, char* argv[])
     rm::SystemCfg sys_;
     rm::loadSystemConfig(system_cfg_file, sys_);
     SPDLOG_LOGGER_INFO(logger, "Loaded configuration from {}.", system_cfg_file);
-    sys_.robot.table_h -= sys_.robot.wedge_h;
-    SPDLOG_LOGGER_INFO(logger, "Adjusted table height by subtracting wedge height. New table height: {}.", sys_.robot.table_h);
+    // sys_.robot.table_h -= sys_.robot.wedge_h;
+    // SPDLOG_LOGGER_INFO(logger, "Adjusted table height by subtracting wedge height. New table height: {}.", sys_.robot.table_h);
 
     auto single_cfg_file = program.present<std::string>("--ring-cfg");
 
@@ -142,7 +142,9 @@ main (int argc, char* argv[])
         // Populate vector directly using directory iterator range
         SPDLOG_LOGGER_INFO(logger, "Processing the measure configuration folder: {}", config_path);
         for (auto const& entry : fs::directory_iterator(config_path)) {
-            calis.push_back(entry.path());
+            if (entry.path().extension() == ".ini") {
+                calis.push_back(entry.path());
+            }
         }
         std::sort(calis.begin(), calis.end());
     } else {
@@ -183,6 +185,7 @@ main (int argc, char* argv[])
         SPDLOG_LOGGER_WARN(logger, "Starting calibration...");
         SPDLOG_LOGGER_INFO(logger, "Processing Ring {}", measure_cfg_file.stem());
         SPDLOG_LOGGER_INFO(spdlog::default_logger(), "Thread {:2d} is processing Ring {}", omp_get_thread_num(), measure_cfg_file.stem());
+        spdlog::default_logger()->flush();
         rm::MeasureCfg measure;
         rm::loadMeasureConfig(measure_cfg_file, measure);
         SPDLOG_LOGGER_INFO(logger, "Loaded configuration from {}.", measure_cfg_file);
@@ -218,7 +221,7 @@ main (int argc, char* argv[])
 
         // dumpConfig("stdout", cali.getSystem());
 
-        visualizeObliquity(cali,  path / "obliquity.ply");
+        SPDLOG_EXEC(logger, spdlog::level::debug, visualizeObliquity(cali,  path / "obliquity.ply"));
 
         // Dump the new configuratrion to a ini file.
         // Do not dump the configuration in verifying only mode.

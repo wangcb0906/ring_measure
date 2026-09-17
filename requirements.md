@@ -36,12 +36,12 @@ visudo
 
 Uncomment: %wheel ALL=(ALL:ALL)
 
-#### 2.3123 Create a regular user
+#### 2.3 Create a regular user
 
 ``` shell
-useradd -m -s /bin/bash chongbiao
-passwd chongbiao
-usermod -aG wheel chongbiao
+useradd -m -s /bin/bash username
+passwd username
+usermod -aG wheel username
 exit
 ```
 
@@ -50,8 +50,33 @@ exit
 Run from Windows PowerShell to set the default user:
 
 ``` shell
-wsl -d archlinux -u root -e bash -c "echo -e '[user]\ndefault=chongbiao' >> /etc/wsl.conf"
+wsl -d archlinux -u root -e bash -c "echo -e '[user]\ndefault=username' >> /etc/wsl.conf"
 wsl --shutdown
+```
+
+---
+
+## Git & SSH Configuration
+
+``` shell
+sudo pacman -Syu openssh
+ssh-keygen -t ed25519 -C "username@mail.com"
+eval "$(ssh-agent -s)"
+ssh-add ~/.ssh/id_ed25519
+```
+
+## Display public key to add to GitHub
+
+``` shell
+cat ~/.ssh/id_ed25519.pub
+```
+See in the internet how to add public key to your Github account.
+
+## Clone the project
+
+Clone the project to your *$HOME* because we have configurate the path of the toolchain based on home adress. Otherwise, you have to reconfigure it when installing packages.
+``` shell
+git clone ...
 ```
 
 ---
@@ -68,7 +93,7 @@ sudo pacman -S boost eigen flann qhull openmp which spdlog opencv imagemagick pk
 
 ---
 
-## Building Native & MinGW Dependencies
+## Building Native Dependencies
 
 Create a workspace directory:
 
@@ -118,7 +143,13 @@ cmake -DCMAKE_BUILD_TYPE=Release ..
 make -j10 && sudo make install -j20
 ```
 
-### 4. LZ4 (MinGW)
+---
+
+## Building MinGW Dependencies
+
+Skip This part if you don't intend to deploy on Windows
+
+### 1. LZ4 (MinGW)
 
 ``` shell
 cd ~/software
@@ -135,7 +166,7 @@ cmake ../build/cmake \
 make -j10 && sudo make install -j10
 ```
 
-### 5. FLANN (MinGW)
+### 2. FLANN (MinGW)
 
 ``` shell
 cd ~/software
@@ -146,25 +177,17 @@ sed -i 's/VERSION 2.6/VERSION 3.5/g' CMakeLists.txt
 export PKG_CONFIG_SYSROOT_DIR=/usr/x86_64-w64-mingw32
 export PKG_CONFIG_LIBDIR=/usr/x86_64-w64-mingw32/lib/pkgconfig:/usr/x86_64-w64-mingw32/share/pkgconfig
 cmake -B build-mingw \
-    -DCMAKE_SYSTEM_NAME=Windows \
-    -DCMAKE_C_COMPILER=x86_64-w64-mingw32-gcc \
-    -DCMAKE_CXX_COMPILER=x86_64-w64-mingw32-g++ \
-    -DCMAKE_RC_COMPILER=x86_64-w64-mingw32-windres \
+    -DCMAKE_TOOLCHAIN_FILE="$HOME/ring_measure/cmake/mingw-w64-x86_64.cmake" \
     -DBUILD_MATLAB_BINDINGS=OFF \
     -DBUILD_PYTHON_BINDINGS=OFF \
     -DBUILD_EXAMPLES=OFF \
     -DCMAKE_BUILD_TYPE=Release \
     -DBUILD_SHARED_LIBS=OFF \
-    -DCMAKE_INSTALL_PREFIX=/usr/x86_64-w64-mingw32 \
-    -DCMAKE_FIND_ROOT_PATH=/usr/x86_64-w64-mingw32 \
-    -DCMAKE_FIND_ROOT_PATH_MODE_PROGRAM=NEVER \
-    -DCMAKE_FIND_ROOT_PATH_MODE_LIBRARY=ONLY \
-    -DCMAKE_FIND_ROOT_PATH_MODE_INCLUDE=ONLY \
-    -DCMAKE_FIND_ROOT_PATH_MODE_PACKAGE=ONLY
-cd build-mingw && make -j10 && sudo make install -j10
+    -DCMAKE_INSTALL_PREFIX=/usr/x86_64-w64-mingw32
+cmake --build build-mingw -j10 && sudo cmake --install build-mingw -j20
 ```
 
-### 6. Qhull (MinGW)
+### 3. Qhull (MinGW)
 
 ``` shell
 cd ~/software
@@ -174,21 +197,13 @@ git checkout 2020.2
 sed -i 's/VERSION 2.6/VERSION 3.5/g' CMakeLists.txt
 
 cmake -B build-mingw \
-    -DCMAKE_SYSTEM_NAME=Windows \
-    -DCMAKE_C_COMPILER=x86_64-w64-mingw32-gcc \
-    -DCMAKE_CXX_COMPILER=x86_64-w64-mingw32-g++ \
-    -DCMAKE_RC_COMPILER=x86_64-w64-mingw32-windres \
     -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_TOOLCHAIN_FILE="$HOME/ring_measure/cmake/mingw-w64-x86_64.cmake" \
     -DBUILD_SHARED_LIBS=ON \
     -DUSE_EXTERNAL_LZ4=ON \
     -DUSE_HDF5=OFF \
     -DCMAKE_INSTALL_PREFIX=/usr/x86_64-w64-mingw32 \
-    -DCMAKE_FIND_ROOT_PATH=/usr/x86_64-w64-mingw32 \
-    -DCMAKE_FIND_ROOT_PATH_MODE_PROGRAM=NEVER \
-    -DCMAKE_FIND_ROOT_PATH_MODE_LIBRARY=ONLY \
-    -DCMAKE_FIND_ROOT_PATH_MODE_INCLUDE=ONLY \
-    -DCMAKE_FIND_ROOT_PATH_MODE_PACKAGE=ONLY
-cd build-mingw && make -j10 && sudo make install -j10
+cmake --build build-mingw --parallel 10 && sudo cmake --install build-mingw --parallel 20
 ```
 
 ---
@@ -201,7 +216,7 @@ Uncomment en_US.UTF-8 UTF-8
 sudo locale-gen
 ```
 
-Reboot wsl in windows terminal
+Reboot wsl in *windows* terminal
 
 ``` shell
 wsl --shutdown
@@ -214,9 +229,12 @@ Install `yay` to access AUR packages for MinGW-w64 dependencies:
 git clone https://aur.archlinux.org/yay-bin.git
 cd yay-bin && makepkg -si
 
-export MAKEFLAGS="-j10"
-yay -S mingw-w64-spdlog mingw-w64-opencv mingw-w64-boost mingw-w64-eigen mingw-w64-qhull
+
+yay -S mingw-w64-spdlog mingw-w64-boost mingw-w64-eigen mingw-w64-qhull
 yay -S mingw-w64-jsoncpp
+# Installing opencv for mingw could take very long time and desire interactive confirms.
+# Try again if it does not work.
+export MAKEFLAGS="-j10"
 yay -S mingw-w64-opencv
 ```
 
@@ -227,51 +245,19 @@ yay -S mingw-w64-opencv
 ``` shell
 cd ~/software/pcl
 cmake -B build-mingw \
-  -G "Unix Makefiles" \
-  -DCMAKE_SYSTEM_NAME=Windows \
-  -DCMAKE_SYSTEM_PROCESSOR=x86_64 \
-  -DCMAKE_C_COMPILER=x86_64-w64-mingw32-gcc \
-  -DCMAKE_CXX_COMPILER=x86_64-w64-mingw32-g++ \
-  -DCMAKE_RC_COMPILER=x86_64-w64-mingw32-windres\
-  -DCMAKE_INSTALL_PREFIX=/usr/x86_64-w64-mingw32 \
-  -DCMAKE_FIND_ROOT_PATH=/usr/x86_64-w64-mingw32 \
-  -DCMAKE_FIND_ROOT_PATH_MODE_PROGRAM=NEVER \
-  -DCMAKE_FIND_ROOT_PATH_MODE_LIBRARY=ONLY \
-  -DCMAKE_FIND_ROOT_PATH_MODE_INCLUDE=ONLY \
-  -DCMAKE_FIND_ROOT_PATH_MODE_PACKAGE=ONLY \
-  -DCMAKE_BUILD_TYPE=Release \
-  -DPCL_SHARED_LIBS=OFF \
-  -DPCL_NO_PRECOMPILE=ON \
-  -DPCL_ONLY_CORE_POINT_TYPES=ON \
-  -DWITH_CUDA=OFF \
-  -DWITH_VTK=OFF \
-  -DWITH_QT=NO \
-  -DBUILD_apps=OFF \
-  -DBUILD_examples=OFF \
-  -DBUILD_global_tests=OFF \
-  -DWITH_DOCS=OFF
-cd build-mingw && make -j10 && sudo make install
-```
-
----
-
-## Git & SSH Configuration
-
-``` shell
-sudo pacman -Syu openssh
-ssh-keygen -t ed25519 -C "wangcb@mail.ustc.edu.cn"
-eval "$(ssh-agent -s)"
-ssh-add ~/.ssh/id_ed25519
-```
-
-## Display public key to add to GitHub
-
-``` shell
-cat ~/.ssh/id_ed25519.pub
-```
-
-## Clone the project
-
-``` shell
-git clone ...
+    -G "Unix Makefiles" \
+    -DCMAKE_TOOLCHAIN_FILE="$HOME/ring_measure/cmake/mingw-w64-x86_64.cmake" \
+    -DCMAKE_INSTALL_PREFIX=/usr/x86_64-w64-mingw32 \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DPCL_SHARED_LIBS=OFF \
+    -DPCL_NO_PRECOMPILE=ON \
+    -DPCL_ONLY_CORE_POINT_TYPES=OFF \
+    -DWITH_CUDA=OFF \
+    -DWITH_VTK=OFF \
+    -DWITH_QT=OFF \
+    -DBUILD_apps=OFF \
+    -DBUILD_examples=OFF \
+    -DBUILD_global_tests=OFF \
+    -DWITH_DOCS=OFF
+cmake --build build-mingw --parallel 10 && sudo cmake --install build-mingw --parallel 20
 ```

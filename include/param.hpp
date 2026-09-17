@@ -134,7 +134,7 @@ namespace RingMeasure {
     struct MiscParam{
         /// If true, the point cloud will be released when not needed,
         /// otherwise, the point cloud will be kept in memory for later use.
-        bool memory_save = false;
+        bool memory_save = true;
         /// The leaf size for downsampling the point cloud before Euclidean segmentation.
         /// To reduce the number of points and to accelerate Euclidean segmentation.
         float leaf_size_before_EC = 1.5f;

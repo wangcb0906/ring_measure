@@ -9,7 +9,7 @@
 
 namespace RingMeasure
 {
-
+#if SPDLOG_LEVEL_DEBUG >= ACTIVE_LOG_LEVEL
     /**
      * @brief Colorizes segmented point cloud clusters with RGB values.
      * The colors are randomly assigned to each cluster for visualization purposes.
@@ -121,4 +121,5 @@ namespace RingMeasure
      */
     void
     visualizeObliquity(const RingCalibration& cali, fs::path ply_path);
+#endif
 }

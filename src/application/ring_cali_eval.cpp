@@ -196,10 +196,11 @@ main (int argc, char* argv[])
 
     rm::SystemCfg sys_;
     rm::loadSystemConfig(system_cfg_file, sys_);
-    if(program.get<bool>("minus-wedge"))
-    {
-        sys_.robot.table_h -= sys_.robot.wedge_h;
-    } 
+    // This is done in cali.hpp in the constructor.
+    // if(program.get<bool>("minus-wedge"))
+    // {
+    //     sys_.robot.table_h -= sys_.robot.wedge_h;
+    // } 
     SPDLOG_LOGGER_INFO(logger, "Loaded configuration from {}.", system_cfg_file);
     rm::RingCfg ring_profile;
 
@@ -243,9 +244,16 @@ main (int argc, char* argv[])
             cfgs_read = __sys.robot.scans;
         }
 
+        std::string log_name = cali_cfg_file.stem().string() + ".log";
+        auto logger=spdlog::basic_logger_mt(log_name, (measure_root / log_name).string(), true);
+        logger->set_level(spdlog::level::trace);
+        logger->set_pattern("[%Y-%m-%d %H:%M:%S] [%l] [%s:%#] %v");
+        // wrapper the PCl logger with time and level information
+        // Bind this thread's execution context to this specific logger
+        thread_active_logger = logger;
+        
         fs::path out_root_path = measure_root / cali_cfg_file.stem();
         CREATE_DIR(logger, out_root_path);
-
         auto start_time = std::chrono::high_resolution_clock::now();
         // Start to evaluate the calibration results
         for (size_t eval_idx = 0; eval_idx < evals.size(); ++eval_idx)
@@ -260,13 +268,6 @@ main (int argc, char* argv[])
             if(auto suffix=program.present<std::string>("--suffix")){
                 ring = ring.stem().string() + "_" + suffix.value() + ring.extension().string();
             }
-            std::string log_name = cali_cfg_file.stem().string() + "_" + ring.stem().string() + ".log";
-            auto logger=spdlog::basic_logger_mt(log_name, (out_root_path / "logs" / log_name).string(), true);
-            logger->set_level(spdlog::level::trace);
-            logger->set_pattern("[%Y-%m-%d %H:%M:%S] [%l] [%s:%#] %v");
-            // wrapper the PCl logger with time and level information
-            // Bind this thread's execution context to this specific logger
-            thread_active_logger = logger;
             cali.setLogger(logger);
             cali.setParam(param);
             cali.setSystem(sys_);
@@ -296,7 +297,7 @@ main (int argc, char* argv[])
             }
             eval_recon[cali_idx][eval_idx] = cali.reconEval();
         }
-        
+        logger->flush();
         auto end_time = std::chrono::high_resolution_clock::now();
         auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
         SPDLOG_LOGGER_INFO(logger, "Thread {} has finished processing the evaluation {}.", omp_get_thread_num(), cali_cfg_file);

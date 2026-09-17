@@ -4,6 +4,7 @@
 
 namespace RingMeasure
 {   
+#if SPDLOG_LEVEL_DEBUG >= ACTIVE_LOG_LEVEL
     pcl::PointCloud<pcl::PointXYZRGB>::Ptr colorizeClusters(
         const pcl::PointCloud<pcl::PointXYZ>::Ptr& input_cloud,
         const std::vector<pcl::PointIndices>& cluster_indices) 
@@ -189,4 +190,5 @@ namespace RingMeasure
             SPDLOG_EXEC(cali.getLogger(), spdlog::level::trace, pcl::io::savePLYFileASCII(ply_path.string(), *clouds[0] + *clouds[1] + *clouds[2]));
         #endif
     }
+#endif
 }

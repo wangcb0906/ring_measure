@@ -6,6 +6,7 @@
 
 #include <filesystem>
 #include <pcl/io/ply_io.h>
+#include <omp.h>
 
 /**
  * @def SPDLOG_EXEC
@@ -46,21 +47,22 @@
  */
 inline auto createPclLogHandler(std::shared_ptr<spdlog::logger> logger) {
     return [logger](const pcl::console::LogRecord& record) {
+        std::string thread_id = "[Thread " + std::to_string(omp_get_thread_num()) + "]";
         switch (record.level) {
         case pcl::console::L_ERROR:
-            SPDLOG_LOGGER_ERROR(logger, "{}", record.message);
+            SPDLOG_LOGGER_ERROR(logger, "{}: {}", thread_id, record.message);
             break;
         case pcl::console::L_WARN:
-            SPDLOG_LOGGER_WARN(logger, "{}", record.message);
+            SPDLOG_LOGGER_WARN(logger, "{}: {}", thread_id, record.message);
             break;
         case pcl::console::L_DEBUG:
-            SPDLOG_LOGGER_DEBUG(logger, "{}", record.message);
+            SPDLOG_LOGGER_DEBUG(logger, "{}: {}", thread_id, record.message);
             break;
         case pcl::console::L_VERBOSE:
-            SPDLOG_LOGGER_TRACE(logger, "{}", record.message);
+            SPDLOG_LOGGER_TRACE(logger, "{}: {}", thread_id, record.message);
             break;
         default:
-            SPDLOG_LOGGER_INFO(logger, "{}", record.message);
+            SPDLOG_LOGGER_INFO(logger, "{}: {}", thread_id, record.message);
             break;
         }
     };
@@ -76,6 +78,14 @@ inline auto createPclLogHandler(std::shared_ptr<spdlog::logger> logger) {
             const pcl::PointCloud<PointT>& cloud)
         {
             return savePLYFileASCII(path.string(), cloud);
+        }
+
+        template <typename PointT>
+        inline int savePLYFileBinary(
+            const std::filesystem::path& path,
+            const pcl::PointCloud<PointT>& cloud)
+        {
+            return savePLYFileBinary(path.string(), cloud);
         }
     }
 #endif
