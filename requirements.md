@@ -154,7 +154,7 @@ Skip This part if you don't intend to deploy on Windows
 ``` shell
 cd ~/software
 git clone https://github.com/lz4/lz4.git
-cd flann
+cd lz4
 cmake -S build/cmake -B build-mingw \
     -DCMAKE_TOOLCHAIN_FILE="$HOME/ring_measure/cmake/mingw-w64-x86_64.cmake" \
     -DCMAKE_BUILD_TYPE=Release \

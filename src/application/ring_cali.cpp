@@ -171,15 +171,13 @@ main (int argc, char* argv[])
             ring = ring.stem().string() + "_" + program.get<std::string>("--suffix") + ring.extension().string();
         }
 
-        #ifndef SPDLOG_LEVEL_OFF
-            auto log_file = log_path / (ring.stem().string() + ".log");
-            auto logger=spdlog::basic_logger_mt(ring.string(), log_file.string(), true);
-            logger->set_level(spdlog::level::trace);
-            logger->set_pattern("[%Y-%m-%d %H:%M:%S] [%l] [%s:%#] %v");
-            // wrapper the PCl logger with time and level information
-            thread_active_logger = logger;
-            cali.setLogger(logger);
-        #endif
+        auto log_file = log_path / (ring.stem().string() + ".log");
+        auto logger=spdlog::basic_logger_mt(ring.string(), log_file.string(), true);
+        logger->set_level(spdlog::level::trace);
+        logger->set_pattern("[%Y-%m-%d %H:%M:%S] [%l] [%s:%#] %v");
+        // wrapper the PCl logger with time and level information
+        thread_active_logger = logger;
+        cali.setLogger(logger);
 
         cali.setParam(param);
 
@@ -359,11 +357,9 @@ main (int argc, char* argv[])
         SPDLOG_LOGGER_INFO(logger, "Finished processing the scan from {}.\n\n\n", measure_cfg_file.stem());
 
         logger->flush();
-        #ifndef SPDLOG_LEVEL_OFF
-            if(single_cfg_file) {
-                dumpParam(log_file, cali.getParam(), std::ios_base::app);
-            }
-        #endif
+        if(single_cfg_file) {
+            dumpParam(log_file, cali.getParam(), std::ios_base::app);
+        }
     }
 
     auto end = std::chrono::high_resolution_clock::now();
