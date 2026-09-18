@@ -56,6 +56,7 @@ compile_commands.json
 *.log
 *.bak
 *.swp
+*Zone.Identifier
 
 # vcpkg
 vcpkg_installed/

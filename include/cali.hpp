@@ -12,7 +12,7 @@
 
 namespace RingMeasure {
 
-    namespace rm = RingMeasure;
+    namespace rm=::RingMeasure;
     namespace fs=std::filesystem;
 
     /**

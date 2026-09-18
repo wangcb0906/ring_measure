@@ -4,7 +4,7 @@ Deployment on Windows with Dll in C#
 
 ## How to deploy on Windows
 
-### 1. Build the linraries
+### 1. Build the libraries
 
 ``` shell
 # Build the Archlinux dependencies, see requirements.md
@@ -19,7 +19,7 @@ cmake --build build-win --target deploy -j
 #### 2.1 Arrange the file structure and adapt the parameters
 
 ``` shell
-user@Windosw MINGW64 /d/test_cross_compile/example-csharp
+user@Windows MINGW64 /d/test_cross_compile/example-csharp
 $ tree -L 2
 |-- ConfigInteropStructs.cs
 |-- ParamInteropStructs.cs
@@ -201,7 +201,7 @@ b2b7b0c98d72892ae887e3966ccb6471  build-win/deploy/cali/20260622/auto/calibratio
  dist=189
  table_h=882
  wedge_h=10
-# @@ -24,6 +24,6 @@
+@@ -24,6 +24,6 @@
 scan_res=3200
  unit="mm"
  valid_len=720

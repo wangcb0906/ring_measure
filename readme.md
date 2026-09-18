@@ -67,7 +67,7 @@ pdflatex refman.tex
 * To run a set of calibrations and evaluate them:
 ``` shell
 ./ring_cali cali/20260622 -o auto -p auto.ini
-./ring_cali_eval cali/20260622/auto auto_cali_eval -b
+./ring_cali_eval cali/20260622/auto auto_cali_eval -bm
 ```
 
 * To visualize the evaluation, run
@@ -128,7 +128,7 @@ corrAngleA = 0.0
 # (-55, 1500) -> (-816.385, 1625.19)
 corrXA     = -761.385
 corrYA     = 125.19
-# Configuration for the scan from unterneath
+# Configuration for the scan from underneath
 angleU     = 20.5  
 corrAngleU = 0.0
 # (1130, 1320)-> (1326.63, 615.659)

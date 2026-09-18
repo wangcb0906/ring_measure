@@ -74,7 +74,7 @@ See in the internet how to add public key to your Github account.
 
 ## Clone the project
 
-Clone the project to your *$HOME* because we have configurate the path of the toolchain based on home adress. Otherwise, you have to reconfigure it when installing packages.
+Clone the project to your *$HOME* because we configurate the path of the toolchain based on $home. Otherwise, you have to reconfigure it when installing packages.
 ``` shell
 git clone ...
 ```
@@ -154,16 +154,15 @@ Skip This part if you don't intend to deploy on Windows
 ``` shell
 cd ~/software
 git clone https://github.com/lz4/lz4.git
-cd lz4 && mkdir build-mingw && cd build-mingw
-cmake ../build/cmake \
-    -DCMAKE_SYSTEM_NAME=Windows \
-    -DCMAKE_C_COMPILER=x86_64-w64-mingw32-gcc \
-    -DCMAKE_CXX_COMPILER=x86_64-w64-mingw32-g++ \
+cd flann
+cmake -S build/cmake -B build-mingw \
+    -DCMAKE_TOOLCHAIN_FILE="$HOME/ring_measure/cmake/mingw-w64-x86_64.cmake" \
     -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_INSTALL_PREFIX=/usr/x86_64-w64-mingw32 \
     -DBUILD_SHARED_LIBS=ON \
     -DBUILD_STATIC_LIBS=OFF
-make -j10 && sudo make install -j10
+    -DCMAKE_INSTALL_PREFIX=/usr/x86_64-w64-mingw32
+cmake --build build-mingw -j10 && sudo cmake --install build-mingw -j20
 ```
 
 ### 2. FLANN (MinGW)

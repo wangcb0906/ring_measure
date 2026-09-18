@@ -94,10 +94,10 @@ namespace RingCalibrationTest
             // measCfg.Ring.Type = "GR";
             // DO NOT need to set MkeTop, MkeBtm, MkeMid.
             // measCfg.Ring.MkeTop = 81.0f;
-            // measCfg.Ring.MkeBtm = 45.0f;
-            // measCfg.Ring.MkeMid = 9.0f;
-            measCfg.Ring.DI = 810.0f;
+            // measCfg.Ring.MkeBtm = 9.0f;
+            // measCfg.Ring.MkeMid = 45.0f;
             measCfg.Ring.DA = 990.0f;
+            measCfg.Ring.DI = 810.0f;
             measCfg.Ring.H = 90.0f;
 
             // Populate RobotPos array (size must match rm::NUM = 3)
