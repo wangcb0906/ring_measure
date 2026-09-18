@@ -134,15 +134,16 @@ namespace RingCalibrationTest
 
             // 4. Set the logger system (optional)
             // If not, everything will be logged to the default console logger.
-            // The PCL logger is always bound to stderr with thread id.
+            // The PCL logger is always bound to stderr/stdout with thread id.
             // In multithreading setting, the internal log messages will not be mixed.
-            // But everything from PCL will be mixed in the console.
-            // MUST:: The loggerName MUST BE UNIQUE for each instance of RingCalibration.
+            // But everything from PCL will be mixed in the console with thread id.
+            // MUST: The loggerName MUST BE UNIQUE for each instance of RingCalibration.
             // Otherwise, the function call will return false.
             // The filename can be any name you want, if it is the same as an existing file, 
-            // you have to take care of overwrite yourself. Overwriting is set to false by default in C#.
-            // See "RingCalibration.cs" for the SetLogger function definition.
+            // you have to take care of overwriting which is set to false by default in C#.
             // The new log would be appended to the existing log file if it exists.
+            // See "RingCalibration.cs" for the SetLogger function definition.
+            // If no logfile is expected, DO NOT set the logger.
  
             string loggerName = @"RingCalibrationLogger";
             // SPDLOG would handle the creation of the log directory if it does not exist.

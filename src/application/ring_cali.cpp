@@ -112,8 +112,6 @@ main (int argc, char* argv[])
 
     fs::path config_path = root / "config";
     fs::path log_path = out_root / "logs";
-    CREATE_DIR(logger, log_path);
-    SPDLOG_LOGGER_INFO(logger, "Output log directory set to {}.", log_path);
     fs::path cali_path = out_root / "calibrations";
     CREATE_DIR(logger, cali_path);
     SPDLOG_LOGGER_INFO(logger, "Output calibration directory set to {}.", cali_path);
@@ -172,13 +170,17 @@ main (int argc, char* argv[])
         if(single_cfg_file && !program.get<std::string>("--suffix").empty()){
             ring = ring.stem().string() + "_" + program.get<std::string>("--suffix") + ring.extension().string();
         }
-        auto log_file = log_path / (ring.stem().string() + ".log");
-        auto logger=spdlog::basic_logger_mt(ring.string(), log_file.string(), true);
-        logger->set_level(spdlog::level::trace);
-        logger->set_pattern("[%Y-%m-%d %H:%M:%S] [%l] [%s:%#] %v");
-        // wrapper the PCl logger with time and level information
-        thread_active_logger = logger;
-        cali.setLogger(logger);
+
+        #ifndef SPDLOG_LEVEL_OFF
+            auto log_file = log_path / (ring.stem().string() + ".log");
+            auto logger=spdlog::basic_logger_mt(ring.string(), log_file.string(), true);
+            logger->set_level(spdlog::level::trace);
+            logger->set_pattern("[%Y-%m-%d %H:%M:%S] [%l] [%s:%#] %v");
+            // wrapper the PCl logger with time and level information
+            thread_active_logger = logger;
+            cali.setLogger(logger);
+        #endif
+
         cali.setParam(param);
 
         auto start_time = std::chrono::high_resolution_clock::now();
@@ -209,7 +211,6 @@ main (int argc, char* argv[])
     
         // Specify the path to the file system.
         fs::path path = out_root / (measure.ring.type + "_" + ring.stem().string());
-        CREATE_DIR(logger, path);
 
         for(const auto& scan : rm::SCAN_LOCS)
         {
@@ -358,9 +359,11 @@ main (int argc, char* argv[])
         SPDLOG_LOGGER_INFO(logger, "Finished processing the scan from {}.\n\n\n", measure_cfg_file.stem());
 
         logger->flush();
-        if(single_cfg_file) {
-            dumpParam(log_file, cali.getParam(), std::ios_base::app);
-        }
+        #ifndef SPDLOG_LEVEL_OFF
+            if(single_cfg_file) {
+                dumpParam(log_file, cali.getParam(), std::ios_base::app);
+            }
+        #endif
     }
 
     auto end = std::chrono::high_resolution_clock::now();

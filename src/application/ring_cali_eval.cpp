@@ -197,10 +197,10 @@ main (int argc, char* argv[])
     rm::SystemCfg sys_;
     rm::loadSystemConfig(system_cfg_file, sys_);
     // This is done in cali.hpp in the constructor.
-    // if(program.get<bool>("minus-wedge"))
-    // {
-    //     sys_.robot.table_h -= sys_.robot.wedge_h;
-    // } 
+    if(program.get<bool>("minus-wedge"))
+    {
+        sys_.robot.table_h -= sys_.robot.wedge_h;
+    } 
     SPDLOG_LOGGER_INFO(logger, "Loaded configuration from {}.", system_cfg_file);
     rm::RingCfg ring_profile;
 

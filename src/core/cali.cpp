@@ -534,13 +534,14 @@ namespace RingMeasure {
         setScanLoc(scan);
         setPhaseType(rm::PhaseType::CALI);
         fs::path path_den, path_seg, path_SAC;
-        #if SPDLOG_LEVEL_INFO >= ACTIVE_LOG_LEVEL
+        #if SPDLOG_LEVEL_INFO >= ACTIVE_LOG_LEVEL and not defined(SPDLOG_LEVEL_OFF)
             path_den = path / (str(ss) + "_cali_denoise");
             CREATE_DIR(logger, path_den);
             path_seg = path / (str(ss) + "_cali_segment");
             CREATE_DIR(logger, path_seg);
             path_SAC = path / (str(ss) + "_cali_slices");
             CREATE_DIR(logger, path_SAC);
+            std::cout << "Create dir ... " << std::endl;
         #endif
         auto time_start = std::chrono::high_resolution_clock::now();
         SPDLOG_LOGGER_INFO(logger, std::string(60, '='));
@@ -646,12 +647,12 @@ namespace RingMeasure {
         setScanLoc(scan);
         setPhaseType(rm::PhaseType::VERI);
         fs::path path_den, path_seg, path_SAC;
-        #if SPDLOG_LEVEL_INFO >= ACTIVE_LOG_LEVEL
-            path_den = path / (str(ss) + "_very_denoise");
+        #if SPDLOG_LEVEL_INFO >= ACTIVE_LOG_LEVEL and not defined(SPDLOG_LEVEL_OFF)
+            path_den = path / (str(ss) + "_veri_denoise");
             CREATE_DIR(logger, path_den);
-            path_seg = path / (str(ss) + "_very_segment");
+            path_seg = path / (str(ss) + "_veri_segment");
             CREATE_DIR(logger, path_seg);
-            path_SAC = path / (str(ss) + "_very_slices");
+            path_SAC = path / (str(ss) + "_veri_slices");
             CREATE_DIR(logger, path_SAC);
         #endif
         SPDLOG_LOGGER_INFO(logger, std::string(60, '='));

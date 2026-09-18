@@ -194,7 +194,7 @@ endif()
 # cmake --build build -j --target ring_cali --clean-first
 # To start a test
 # cmake --build build -j --target ring_cali && ./ring_cali cali/20260622 -o auto -r 4_ND_20260622_4_19.ini
-# cmake --build build -j --target ring_cali_eval  && ./ring_cali_eval cali/20260622/auto auto_cali_eval -b
+# cmake --build build -j --target ring_cali_eval  && ./ring_cali_eval cali/20260622/auto auto_cali_eval -bm
 # python visual/eval_bin.py ./cali/20260622/auto_cali_eval/
 # ./ring_cali_eval cali/20260622/auto eval -e measure/20260326/r1 -b -t measure/20260326/config/11.ini
 # python visual/eval_bin.py measure/20260326/r1/eval/ cali/20260622/auto
