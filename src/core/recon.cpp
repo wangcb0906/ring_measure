@@ -87,8 +87,7 @@ void RingMeasure::RingCalibration::reconstruct(const fs::path& path_)
         {
             pcl::transformPointCloud(*line_cloud, *line_cloud, T_affine);
 
-            // /py line.plot_line($idx, $show, $ra, $ri, $h, $table_h)
-            const int show = 0; // Set show = 1 to plot the interactive one
+            const int show = 1; // Set show = 1 to plot the interactive one
             if( 
                 // (scan_loc == RingMeasure::ScanLocation::Under) &&
                 phase_type == RingMeasure::PhaseType::VERI){
@@ -106,8 +105,10 @@ void RingMeasure::RingCalibration::reconstruct(const fs::path& path_)
                     cloud_x.push_back(pt.x);
                     cloud_y.push_back(pt.y);
                 }
-                auto aux = path;
-                // SPDLOG_LOGGER_INFO(spdlog::default_logger(), "Drawing scan line {} : {:3d} with {} valid points.", scanLocationToString(scan_loc), idx, points.size());
+                // disable the multi-threading first, see ring_cali.cpp
+                // Set show = 1 to plot the interactive one
+                // /py line.plot_line($idx, $show, $ra, $ri, $h, $table_h)
+                SPDLOG_LOGGER_INFO(spdlog::default_logger(), "Drawing scan line {} : {:3d} with {} valid to file {}.", scanLocationToString(scan_loc), idx, cloud_x.size(), path);
             }
             pcl::transformPointCloud(*line_cloud, *line_cloud, T_y);
         }
