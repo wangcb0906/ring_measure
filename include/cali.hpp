@@ -5,7 +5,7 @@
 #include "log.hpp"
 #include <Eigen/Core>
 #include <spdlog/spdlog.h>
-#include "spdlog/sinks/stdout_color_sinks.h"
+#include <spdlog/sinks/stdout_color_sinks.h>
 #include <spdlog/sinks/basic_file_sink.h>
 #include <pcl/point_types.h>
 #include <pcl/point_cloud.h>

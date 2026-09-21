@@ -79,65 +79,82 @@ namespace RingMeasure {
     void loadMeasureConfig(const std::filesystem::path& measure_cfg, struct MeasureCfg& measure)
     {
         ini::IniFile measure_ini(measure_cfg.string());
-        measure.img.path = std::filesystem::path(measure_ini["Scan"]["path"].as<std::string>());
-        measure.img.imgs[I]      = measure_ini["Scan"]["I"].as<std::string>();
-        measure.img.imgs[O]      = measure_ini["Scan"]["A"].as<std::string>();
-        measure.img.imgs[U]      = measure_ini["Scan"]["U"].as<std::string>();
-        measure.img.luma_imgs[I] = measure_ini["Scan"]["LumaI"].as<std::string>();
-        measure.img.luma_imgs[O] = measure_ini["Scan"]["LumaA"].as<std::string>();
-        measure.img.luma_imgs[U] = measure_ini["Scan"]["LumaU"].as<std::string>();
-      
-        measure.ring.spk_form = measure_ini["Ring"]["spk_form"].as<std::string>();
-        measure.ring.isTured = measure_ini["Ring"]["is_turned"].as<bool>();
-        measure.ring.type = measure_ini["Ring"]["type"].as<std::string>();
-        measure.ring.mke_top = measure_ini["Ring"]["mke_top"].as<float>();
-        measure.ring.mke_btm = measure_ini["Ring"]["mke_btm"].as<float>();
-        measure.ring.mke_mid = measure_ini["Ring"]["mke_mid"].as<float>();
-        measure.ring.dI = measure_ini["Ring"]["di"].as<float>();
-        measure.ring.dA = measure_ini["Ring"]["da"].as<float>();
-        measure.ring.h = measure_ini["Ring"]["h"].as<float>();
-      
-        measure.robot_pos[I].x = measure_ini["Robot"]["xI"].as<float>();
-        measure.robot_pos[I].y = measure_ini["Robot"]["yI"].as<float>();
-        measure.robot_pos[O].x = measure_ini["Robot"]["xA"].as<float>();
-        measure.robot_pos[O].y = measure_ini["Robot"]["yA"].as<float>();
-        measure.robot_pos[U].x = measure_ini["Robot"]["xU"].as<float>();
-        measure.robot_pos[U].y = measure_ini["Robot"]["yU"].as<float>();
+        try
+        {
+            measure.img.path = std::filesystem::path(measure_ini["Scan"]["path"].as<std::string>());
+            measure.img.imgs[I]      = measure_ini["Scan"]["I"].as<std::string>();
+            measure.img.imgs[O]      = measure_ini["Scan"]["A"].as<std::string>();
+            measure.img.imgs[U]      = measure_ini["Scan"]["U"].as<std::string>();
+            measure.img.luma_imgs[I] = measure_ini["Scan"]["LumaI"].as<std::string>();
+            measure.img.luma_imgs[O] = measure_ini["Scan"]["LumaA"].as<std::string>();
+            measure.img.luma_imgs[U] = measure_ini["Scan"]["LumaU"].as<std::string>();
+          
+            measure.ring.spk_form    = measure_ini["Ring"]["spk_form"].as<std::string>();
+            measure.ring.isTured     = measure_ini["Ring"]["is_turned"].as<bool>();
+            measure.ring.type        = measure_ini["Ring"]["type"].as<std::string>();
+            measure.ring.mke_top     = measure_ini["Ring"]["mke_top"].as<float>();
+            measure.ring.mke_btm     = measure_ini["Ring"]["mke_btm"].as<float>();
+            measure.ring.mke_mid     = measure_ini["Ring"]["mke_mid"].as<float>();
+            measure.ring.dI          = measure_ini["Ring"]["di"].as<float>();
+            measure.ring.dA          = measure_ini["Ring"]["da"].as<float>();
+            measure.ring.h           = measure_ini["Ring"]["h"].as<float>(); 
+          
+            measure.robot_pos[I].x   = measure_ini["Robot"]["xI"].as<float>();
+            measure.robot_pos[I].y   = measure_ini["Robot"]["yI"].as<float>();
+            measure.robot_pos[O].x   = measure_ini["Robot"]["xA"].as<float>();
+            measure.robot_pos[O].y   = measure_ini["Robot"]["yA"].as<float>();
+            measure.robot_pos[U].x   = measure_ini["Robot"]["xU"].as<float>();
+            measure.robot_pos[U].y   = measure_ini["Robot"]["yU"].as<float>();
+        }
+        catch(const std::exception& e)
+        {   
+            std::cerr << "Error loading measure configuration from " << measure_cfg << ": " << e.what() << std::endl;
+            throw std::runtime_error(e.what());
+        }
     }
 
     void loadSystemConfig(const std::filesystem::path& sys_cfg, struct SystemCfg& sys)
     {
     
         ini::IniFile system_ini(sys_cfg.string());
-        sys.robot.scans[I].view_angle   = system_ini["Robot"]["angleI"].as<float>();
-        sys.robot.scans[I].angle_corr   = system_ini["Robot"]["corrAngleI"].as<float>();
-        sys.robot.scans[I].pos_corr.x = system_ini["Robot"]["corrXI"].as<float>();
-        sys.robot.scans[I].pos_corr.y = system_ini["Robot"]["corrYI"].as<float>();
-      
-        sys.robot.scans[O].view_angle   = system_ini["Robot"]["angleA"].as<float>();
-        sys.robot.scans[O].angle_corr   = system_ini["Robot"]["corrAngleA"].as<float>();
-        sys.robot.scans[O].pos_corr.x = system_ini["Robot"]["corrXA"].as<float>();
-        sys.robot.scans[O].pos_corr.y = system_ini["Robot"]["corrYA"].as<float>();
-      
-        sys.robot.scans[U].view_angle   = system_ini["Robot"]["angleU"].as<float>();
-        sys.robot.scans[U].angle_corr   = system_ini["Robot"]["corrAngleU"].    as<float>();
-        sys.robot.scans[U].pos_corr.x = system_ini["Robot"]["corrXU"].as<float>();
-        sys.robot.scans[U].pos_corr.y = system_ini["Robot"]["corrYU"].as<float>();
-      
-        sys.robot.arm.x = system_ini["Robot"]["armX"].as<float>();
-        sys.robot.arm.y = system_ini["Robot"]["armY"].as<float>();
-        sys.robot.dist  = system_ini["Robot"]["dist"].as<float>();
-        sys.robot.table_h  = system_ini["Robot"]["table_h"].as<float>();
-        sys.robot.wedge_h  = system_ini["Robot"]["wedge_h"].as<float>();
-      
-        sys.sensor.scan_num = system_ini["Sensor"]["scan_num"].as<int>();
-        sys.sensor.scan_res = system_ini["Sensor"]["scan_res"].as<int>();
-        sys.sensor.valid_len = system_ini["Sensor"]["valid_len"].as<int>();
-        sys.sensor.z_pitch = system_ini["Sensor"]["z_pitch"].as<float>();
-        sys.sensor.z_oft = system_ini["Sensor"]["z_oft"].as<float>();
-        sys.sensor.x_pitch = system_ini["Sensor"]["x_pitch"].as<float>();
-        sys.sensor.unit = system_ini["Sensor"]["unit"].as<std::string>();
-        sys.sensor.mount_height = system_ini["Sensor"]["mount"].as<float>();
+
+        try
+        {
+            sys.robot.scans[I].view_angle = system_ini["Robot"]["angleI"].as<float>();
+            sys.robot.scans[I].angle_corr = system_ini["Robot"]["corrAngleI"].as<float>();
+            sys.robot.scans[I].pos_corr.x = system_ini["Robot"]["corrXI"].as<float>();
+            sys.robot.scans[I].pos_corr.y = system_ini["Robot"]["corrYI"].as<float>();
+          
+            sys.robot.scans[O].view_angle = system_ini["Robot"]["angleA"].as<float>();
+            sys.robot.scans[O].angle_corr = system_ini["Robot"]["corrAngleA"].as<float>();
+            sys.robot.scans[O].pos_corr.x = system_ini["Robot"]["corrXA"].as<float>();
+            sys.robot.scans[O].pos_corr.y = system_ini["Robot"]["corrYA"].as<float>();
+          
+            sys.robot.scans[U].view_angle = system_ini["Robot"]["angleU"].as<float>();
+            sys.robot.scans[U].angle_corr = system_ini["Robot"]["corrAngleU"].as<float>();
+            sys.robot.scans[U].pos_corr.x = system_ini["Robot"]["corrXU"].as<float>();
+            sys.robot.scans[U].pos_corr.y = system_ini["Robot"]["corrYU"].as<float>();
+          
+            sys.robot.arm.x               = system_ini["Robot"]["armX"].as<float>();
+            sys.robot.arm.y               = system_ini["Robot"]["armY"].as<float>();
+            sys.robot.dist                = system_ini["Robot"]["dist"].as<float>();
+            sys.robot.table_h             = system_ini["Robot"]["table_h"].as<float>();
+            sys.robot.wedge_h             = system_ini["Robot"]["wedge_h"].as<float>();
+          
+            sys.sensor.scan_num           = system_ini["Sensor"]["scan_num"].as<int>();
+            sys.sensor.scan_res           = system_ini["Sensor"]["scan_res"].as<int>();
+            sys.sensor.valid_len          = system_ini["Sensor"]["valid_len"].as<int>();
+            sys.sensor.z_pitch            = system_ini["Sensor"]["z_pitch"].as<float>();
+            sys.sensor.z_oft              = system_ini["Sensor"]["z_oft"].as<float>();
+            sys.sensor.x_pitch            = system_ini["Sensor"]["x_pitch"].as<float>();
+            sys.sensor.unit               = system_ini["Sensor"]["unit"].as<std::string>();
+            sys.sensor.mount_height       = system_ini["Sensor"]["mount"].as<float>();
+        }
+        catch(const std::exception& e)
+        {
+            std::cerr << "Error loading system configuration from " << sys_cfg << ": " << e.what() << std::endl;
+            throw std::runtime_error(e.what());
+        }
     }
 
     void dumpCorrection(const std::filesystem::path& correction_cfg,
