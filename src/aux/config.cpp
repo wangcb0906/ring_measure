@@ -13,35 +13,35 @@ namespace RingMeasure {
     {
         ini::IniFile system_ini(sys_cfg.string());
       
-        system_ini["Robot"]["angleI"] = sys.robot.scans[I].view_angle;
+        system_ini["Robot"]["angleI"]     = sys.robot.scans[I].view_angle;
         system_ini["Robot"]["corrAngleI"] = sys.robot.scans[I].angle_corr;
-        system_ini["Robot"]["corrXI"] = sys.robot.scans[I].pos_corr.x;
-        system_ini["Robot"]["corrYI"] = sys.robot.scans[I].pos_corr.y;
+        system_ini["Robot"]["corrXI"]     = sys.robot.scans[I].pos_corr.x;
+        system_ini["Robot"]["corrYI"]     = sys.robot.scans[I].pos_corr.y;
       
-        system_ini["Robot"]["angleA"] = sys.robot.scans[O].view_angle;
+        system_ini["Robot"]["angleA"]     = sys.robot.scans[O].view_angle;
         system_ini["Robot"]["corrAngleA"] = sys.robot.scans[O].angle_corr;
-        system_ini["Robot"]["corrXA"] = sys.robot.scans[O].pos_corr.x;
-        system_ini["Robot"]["corrYA"] = sys.robot.scans[O].pos_corr.y;
+        system_ini["Robot"]["corrXA"]     = sys.robot.scans[O].pos_corr.x;
+        system_ini["Robot"]["corrYA"]     = sys.robot.scans[O].pos_corr.y;
       
-        system_ini["Robot"]["angleU"] = sys.robot.scans[U].view_angle;
+        system_ini["Robot"]["angleU"]     = sys.robot.scans[U].view_angle;
         system_ini["Robot"]["corrAngleU"] = sys.robot.scans[U].angle_corr;
-        system_ini["Robot"]["corrXU"] = sys.robot.scans[U].pos_corr.x;
-        system_ini["Robot"]["corrYU"] = sys.robot.scans[U].pos_corr.y;
+        system_ini["Robot"]["corrXU"]     = sys.robot.scans[U].pos_corr.x;
+        system_ini["Robot"]["corrYU"]     = sys.robot.scans[U].pos_corr.y;
       
-        system_ini["Robot"]["armX"] = sys.robot.arm.x;
-        system_ini["Robot"]["armY"] = sys.robot.arm.y;
-        system_ini["Robot"]["dist"] = sys.robot.dist ;
-        system_ini["Robot"]["table_h"] = sys.robot.table_h ;
-        system_ini["Robot"]["wedge_h"] = sys.robot.wedge_h ;
+        system_ini["Robot"]["armX"]       = sys.robot.arm.x;
+        system_ini["Robot"]["armY"]       = sys.robot.arm.y;
+        system_ini["Robot"]["dist"]       = sys.robot.dist ;
+        system_ini["Robot"]["table_h"]    = sys.robot.table_h ;
+        system_ini["Robot"]["wedge_h"]    = sys.robot.wedge_h ;
       
-        system_ini["Sensor"]["scan_num"] = sys.sensor.scan_num;
-        system_ini["Sensor"]["scan_res"] = sys.sensor.scan_res;
+        system_ini["Sensor"]["scan_num"]  = sys.sensor.scan_num;
+        system_ini["Sensor"]["scan_res"]  = sys.sensor.scan_res;
         system_ini["Sensor"]["valid_len"] = sys.sensor.valid_len;
-        system_ini["Sensor"]["z_pitch"] = sys.sensor.z_pitch;
-        system_ini["Sensor"]["z_oft"] = sys.sensor.z_oft;
-        system_ini["Sensor"]["x_pitch"] = sys.sensor.x_pitch;
-        system_ini["Sensor"]["unit"] = sys.sensor.unit;
-        system_ini["Sensor"]["mount"] = sys.sensor.mount_height;
+        system_ini["Sensor"]["z_pitch"]   = sys.sensor.z_pitch;
+        system_ini["Sensor"]["z_oft"]     = sys.sensor.z_oft;
+        system_ini["Sensor"]["x_pitch"]   = sys.sensor.x_pitch;
+        system_ini["Sensor"]["unit"]      = sys.sensor.unit;
+        system_ini["Sensor"]["mount"]     = sys.sensor.mount_height;
         if(sys_cfg.string() == "stdout"){
             system_ini.encode(std::cout);
             return;
@@ -162,20 +162,20 @@ namespace RingMeasure {
                         std::ios_base::openmode mode)
     {
         ini::IniFile correction_ini(correction_cfg.string());
-        correction_ini["Robot"]["angleI"] = scans[I].view_angle;
+        correction_ini["Robot"]["angleI"]     = scans[I].view_angle;
         correction_ini["Robot"]["corrAngleI"] = scans[I].angle_corr;
-        correction_ini["Robot"]["corrXI"] = scans[I].pos_corr.x;
-        correction_ini["Robot"]["corrYI"] = scans[I].pos_corr.y;
+        correction_ini["Robot"]["corrXI"]     = scans[I].pos_corr.x;
+        correction_ini["Robot"]["corrYI"]     = scans[I].pos_corr.y;
       
-        correction_ini["Robot"]["angleA"] = scans[O].view_angle;
+        correction_ini["Robot"]["angleA"]     = scans[O].view_angle;
         correction_ini["Robot"]["corrAngleA"] = scans[O].angle_corr;
-        correction_ini["Robot"]["corrXA"] = scans[O].pos_corr.x;
-        correction_ini["Robot"]["corrYA"] = scans[O].pos_corr.y;
+        correction_ini["Robot"]["corrXA"]     = scans[O].pos_corr.x;
+        correction_ini["Robot"]["corrYA"]     = scans[O].pos_corr.y;
       
-        correction_ini["Robot"]["angleU"] = scans[U].view_angle;
+        correction_ini["Robot"]["angleU"]     = scans[U].view_angle;
         correction_ini["Robot"]["corrAngleU"] = scans[U].angle_corr;
-        correction_ini["Robot"]["corrXU"] = scans[U].pos_corr.x;
-        correction_ini["Robot"]["corrYU"] = scans[U].pos_corr.y;
+        correction_ini["Robot"]["corrXU"]     = scans[U].pos_corr.x;
+        correction_ini["Robot"]["corrYU"]     = scans[U].pos_corr.y;
 
         if(correction_cfg.string() == "stdout"){
             correction_ini.encode(std::cout);

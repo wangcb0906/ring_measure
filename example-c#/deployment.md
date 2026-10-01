@@ -50,7 +50,15 @@ $ tree -L 2
 `-- obj    # auto generated
 ```
 
-#### 2.2 Run *program.cs* in VSCode and check the results 
+#### 2.2 Run *program.cs* in VSCode and check the results
+   * The original code is only tested with .Net 9.0
+   * Install .Net SDK 9.0 to run this example program
+   * Click and run the debugger in VSCode with C# extension installed
+   * Use terminal to test it.
+``` shell
+cd example-c#
+dotnet run
+```
 
 ---
 

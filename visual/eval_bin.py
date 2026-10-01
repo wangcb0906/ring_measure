@@ -15,7 +15,6 @@ def load_scan_binary(filename):
     with open(filename, "rb") as f:
         # 1. Read the 4 dimensions (size_t on a 64-bit system is uint64)
         shape = np.fromfile(f, dtype=np.uint64, count=4)
-
         # 2. Read the 4 metadata floats (da, di, h, table_h)
         metadata_arr = np.fromfile(f, dtype=np.float32, count=4)
         # 3. Read the payload data
@@ -35,7 +34,6 @@ def load_recon_binary(filename):
     with open(filename, "rb") as f:
         # 1. Read the 3 dimensions (size_t on a 64-bit system is uint64)
         shape = np.fromfile(f, dtype=np.uint64, count=3)
-  
         # 2. Read the 4 metadata floats (da, di, h, table_h)
         metadata_arr = np.fromfile(f, dtype=np.float32, count=4)
         # 3. Read the payload data

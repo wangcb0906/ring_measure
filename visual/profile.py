@@ -98,7 +98,7 @@ def plot_profile(show):
             dragmode='pan',
         )
 
-        # 6. Convert to HTML and wrap in a 100% viewport container with injected CSS overrides
+        # Convert to HTML and wrap in a 100% viewport container with injected CSS overrides
         raw_html = fig.to_html(include_plotlyjs='cdn', full_html=False, config={'responsive': True})
 
         html_content = f"""
@@ -132,7 +132,7 @@ def plot_profile(show):
         </body>
         </html>
         """
-        # set  position to 2 to make it appear in the second tab of the debugger's UI
+        # set position to 2 to make it appear in the second tab of the debugger's UI
         debugger.display_html(html_content, title=title, position=2, reveal=True)
         del fig
         gc.collect()

@@ -45,9 +45,9 @@ cmake --build build-win --target deploy -j
 
 #### To build the document
 
-``` shell
-doxygen
-cd latex
+``` shell 
+doxygen # Install doxygen to generate HTML documents.
+cd latex # Install texlive to compile PDF documents.
 pdflatex refman.tex
 makeindex refman.idx
 pdflatex refman.tex
@@ -64,6 +64,52 @@ pdflatex refman.tex
 
 ## Help
 
+* Structure of the project
+
+``` shell 
+├── cali # calis
+│   ├── 20260622                       # Calibration on 2026.06.22
+│   ├── 20260825                       # Calibration on 2026.08.25
+│   └── 20260921                       # calibration on 2026.09.21
+├── cmake
+│   ├── deploy.cmake                   # Scripts to deploy this cali on Windows
+│   └── mingw-w64-x86_64.cmake         # Compile toolchain
+├── CMakeLists.txt                 # Scripts to make this project
+├── Doxyfile                       # Configuration file to generate documents.
+├── evaluation                     # Results of the project 
+├── example-c#                     # Example to demo the usage of exported ABIs in CSharp.
+│   ├── ConfigInteropStructs.cs        # C# Structs to wrap C++ structs. Ring configuration
+│   ├── deployment.md                  # Document of deployment
+│   ├── ParamInteropStructs.cs         # C# Structs to wrap C++ structs. Tuning params
+│   ├── Program.cs                     # Example program
+│   ├── RingCalibration.cs             # C# class to wrap C++ class.
+│   ├── RingCalibrationTest.csproj     # Project configuration
+│   └── RingCaliMethods.cs             # C++ ABI wrappers
+├── include                        # Headers
+│   ├── 3rdparty                       # Third party header-only libs
+│   ├── application.hpp                # Helpers for apps
+│   ├── cali.hpp                       # Calibration APIs
+│   ├── config.hpp                     # Configuration reading APIs
+│   ├── export                         # Wrapper to export C++ APIs
+│   ├── log.hpp                        # Logging systems helpers
+│   ├── param.hpp                      # Params to tune
+│   └── visualization.hpp              # Point cloud visualiaziton tools
+├── readme.md                      # This document
+├── requirements.md                # Dependencies
+├── src                            # Source code of the main idea
+│   ├── application                    # Apps, calibration and evaluation
+│   ├── aux                            # Helpers
+│   ├── core                           # Core idea
+│   ├── export                         # Wrapper to export C++ APIs
+│   └── linux                          # Linux PCL instantiator
+└── visual                         # Install codelldb in VScode to use the visualization tools. 
+    ├── eval_bin.py                    # Visualize the numerical results
+    ├── hist.py                        # Visualize histogram of y coordinates
+    ├── line.py                        # Visualize the reconstructed surfaces. Intuitive accuracy
+    ├── parse.py                       # Helpers for visualizations
+    └── profile.py                     # Visualize the *profile* of the cylinder.
+```
+
 * To run a set of calibrations and evaluate them:
 ``` shell
 ./ring_cali cali/20260622 -o auto -p auto.ini
@@ -75,10 +121,10 @@ pdflatex refman.tex
 python visual/eval_bin.py ./cali/20260622/auto_cali_eval/
 ```
 
-* To enable debugging mode. 
+* To enable debugging mode.
     * Compile the project with Debug mode.
     * Enable the break point with conditions.
-    * Start the debugging mode you want in VScode.
+    * Start the selected debugger in VScode.
     * Set *show* in the cpp code to 1 to enable a web app to generate an interactive visualization.
 
 * The calibration is structured in the following way:
@@ -184,6 +230,16 @@ da = 990
 di = 810
 h  = 90
 ```
+
+## Results
+
+The maximal error of lies in the range of 0.25mm, which meets the customer's requirements.
+
+* The average error
+![Average Error](./evaluation/cali_cmp_average.png)
+
+* The maximal error
+![Maximal Error](./evaluation/cali_cmp_maximum.png)
 
 ## Authors
 
