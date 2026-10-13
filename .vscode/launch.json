@@ -8,9 +8,9 @@
             "program": "${workspaceFolder}/ring_cali",
             "cwd": "${workspaceFolder}",
             "args": [
-                "cali/20260622",
+                "cali/20260928",
                 "-r",
-                "4_ND_20260622_4_19.ini",
+                "calibration_new.ini",
                 "-o", "auto",
                 "-p", "auto.ini"
             ],
@@ -31,9 +31,11 @@
             "program": "${workspaceFolder}/ring_cali",
             "cwd": "${workspaceFolder}",
             "args": [
-                "cali/20260622",
+                "cali/20260928",
                 "-r",
-                "4_ND_20260622_4_19.ini"
+                "calibration_new.ini",
+                "-o",
+                "auto"
             ],
             "preLaunchTask": "build_cali",
             "MIMode": "gdb",

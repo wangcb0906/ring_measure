@@ -159,11 +159,13 @@ main (int argc, char* argv[])
                 cali.verification(scan, path, true);
                 auto loc = static_cast<size_t>(scan);
                 eval_scan[loc][cali_idx][eval_idx] = cali.scanEval();
-                if(ring.string().find("_3_01") != std::string::npos)
+                if(ring.string().find("_3_01") != std::string::npos || 
+                   ring.string().find("_0_75") != std::string::npos)
                 {
                     eval_scan[loc][cali_idx][eval_idx][static_cast<size_t>(rm::RingCalibration::ScanMetrics::H_PLANE_FIT)] -= 10;
                 }
-                if(cali_cfg_file.string().find("_3_01") != std::string::npos)
+                if(cali_cfg_file.string().find("_3_01") != std::string::npos ||
+                   cali_cfg_file.string().find("_0_75") != std::string::npos)
                 {   
                     eval_scan[loc][cali_idx][eval_idx][static_cast<size_t>(rm::RingCalibration::ScanMetrics::H_PLANE_FIT)] += 10;
                 }

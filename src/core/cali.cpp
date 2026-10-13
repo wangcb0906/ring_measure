@@ -287,7 +287,8 @@ namespace RingMeasure {
         if(points.size() < 2)
         {
           SPDLOG_LOGGER_ERROR(logger, "Not enough points to fit a line. Need at least 2 points.");
-          exit(EXIT_FAILURE);
+          status = false;
+          return ;
         }
 
         // fit line to estimate the angle
@@ -432,7 +433,7 @@ namespace RingMeasure {
                            cylinder_coeff->values[3], cylinder_coeff->values[4], cylinder_coeff->values[5]);
         SPDLOG_LOGGER_INFO(logger, "Radius: {:.3f}", cylinder_coeff->values[6]);
         float real_diameter = scan_loc == ScanLocation::In ? measure.ring.dI / 2.0 : measure.ring.dA / 2.0;
-        SPDLOG_LOGGER_INFO(logger, "The real value of the radius is: {:.3f}", real_diameter/2.0);
+        SPDLOG_LOGGER_INFO(logger, "The real value of the radius is: {:.3f}", real_diameter);
         
         // radius, axis, center
         cyl_fit[loc] = std::make_tuple(cylinder_coeff->values[6],

@@ -312,7 +312,7 @@ namespace RingMeasure {
     
             rm::MeasureCfg measure;                 ///< Measure configuration
             rm::SystemCfg system;                   ///< System configuration
-            int camera_resolution;                  ///< Camera resolution
+            float camera_resolution;                ///< Camera resolution
             float mid_height;                       ///< Middle height of the scan
             float pitch_scale;
             float pitch_offset;

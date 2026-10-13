@@ -106,6 +106,12 @@ namespace {
             );
             float ratio = params.curv_thld_ratio;
             int percentile_index = scans * ratio;
+            if (percentile_index >= points.size())
+            {
+                return -1.0f; 
+                // This function does not work due to previous reconstruction or segmentation error.
+                // The percentile index is out of bounds.
+            }
             percentile_curv_thld = points[percentile_index][0];
             SPDLOG_LOGGER_TRACE(logger, "Percentile index for curvature threshold: {} and value: {}", percentile_index, percentile_curv_thld);
         }
@@ -453,6 +459,12 @@ namespace RingMeasure {
             } else if(params.curvature_type == OperationMode::AUTO)
             {
                 curv_thld = getCurvThld(input_with_normals, path / (prefix + "curv_clustering_visualization.ply"), params, getScanNum(), logger);
+                if (curv_thld < 0.0f)
+                {
+                    status = false;
+                    SPDLOG_LOGGER_ERROR(logger, "Failed to determine curvature threshold automatically. Please check the log for details or set the curvature threshold manually.");
+                    return nullptr;
+                }
                 reg.setCurvatureThreshold (curv_thld);
                 SPDLOG_LOGGER_INFO(logger, "Curvature threshold is automatically determined.");
             } else 

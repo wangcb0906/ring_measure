@@ -108,7 +108,7 @@ void RingMeasure::RingCalibration::reconstruct(const fs::path& path_)
                 // disable the multi-threading first, see ring_cali.cpp
                 // Set show = 1 to plot the interactive one
                 // /py line.plot_line($idx, $show, $ra, $ri, $h, $table_h)
-                SPDLOG_LOGGER_INFO(spdlog::default_logger(), "Drawing scan line {} : {:3d} with {} valid to file {}.", scanLocationToString(scan_loc), idx, cloud_x.size(), path);
+                // SPDLOG_LOGGER_INFO(spdlog::default_logger(), "Drawing scan line {} : {:3d} with {} valid to file {}.", scanLocationToString(scan_loc), idx, cloud_x.size(), path);
             }
             pcl::transformPointCloud(*line_cloud, *line_cloud, T_y);
         }

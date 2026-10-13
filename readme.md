@@ -37,10 +37,10 @@ cmake --build build --target ring_cali -j
 #### On Windows(Cross-compilation)
 
 ``` shell
-cmake -S . -B build-win -G "Unix Makefiles" -DCMAKE_TOOLCHAIN_FILE="$PWD/cmake/mingw-w64-x86_64.cmake"
+# Go to the root directory of the project
+./cmake/compile.sh
 # Note: Only the printed deployed dependencies are needed to run this algorithm on Windows.
 # The others could be omitted.
-cmake --build build-win --target deploy -j
 ```
 
 #### To build the document

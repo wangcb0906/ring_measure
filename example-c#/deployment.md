@@ -8,11 +8,8 @@ Deployment on Windows with Dll in C#
 
 ``` shell
 # Build the Archlinux dependencies, see requirements.md
-rm build-win -r
-cmake -S . -B build-win -G "Unix Makefiles" -DCMAKE_TOOLCHAIN_FILE="$PWD/cmake/mingw-w64-x86_64.cmake"
-# Note: Only the printed deployed dependencies are needed to run this algorithm on Windows.
-# The others could be omitted.
-cmake --build build-win --target deploy -j
+# Go to the root directory of the project
+./cmake/compile.sh
 ```
 ### 2. Test the example project
 
