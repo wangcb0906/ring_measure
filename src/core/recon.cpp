@@ -49,11 +49,11 @@ void RingMeasure::RingCalibration::reconstruct(const fs::path& path_)
         x[i] = aux * (system.sensor.scan_res/2l - i) * is_under;
     }
 
-    raw_recs[IDX] = pcl::PointCloud<pcl::PointXYZ>::Ptr(new pcl::PointCloud<pcl::PointXYZ>);
+    raw_recs[IDX] = pcl::make_shared<pcl::PointCloud<pcl::PointXYZ>>();
     // Processing each scan line to reconstruct the 3D point cloud
     SPDLOG_LOGGER_INFO(logger,"Processing scan image {}", scan);
     // create a auxiliary point cloud to store the reconstruction of a line
-    pcl::PointCloud<pcl::PointXYZ>::Ptr line_cloud(new pcl::PointCloud<pcl::PointXYZ>);
+    pcl::PointCloud<pcl::PointXYZ>::Ptr line_cloud = pcl::make_shared<pcl::PointCloud<pcl::PointXYZ>>();
     line_cloud->reserve(max_res);
     // create a auxiliary vector to store the depth of a line
     std::vector<uint16_t> scan_buffer(max_res);

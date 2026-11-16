@@ -89,3 +89,21 @@ inline auto createPclLogHandler(std::shared_ptr<spdlog::logger> logger) {
         }
     }
 #endif
+
+namespace RingMeasure
+{
+    /**
+     * @brief Save a point cloud to a PLY file in binary/ASCII format.
+     * @param filename The name of the file to save.
+     * @param cloud The point cloud to save.
+     * @return 0 on success, -1 on failure.
+     */
+    template <typename PointT>
+    inline int savePLY(const std::string& filename, const pcl::PointCloud<PointT>& cloud) {
+        #if RING_MEASURE_SAVE_PLY_TYPE == RING_MEASURE_SAVE_BIN
+            return pcl::io::savePLYFileBinary(filename, cloud);
+        #else
+            return pcl::io::savePLYFileASCII(filename, cloud);
+        #endif
+    }
+}

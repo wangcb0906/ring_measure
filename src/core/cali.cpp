@@ -70,8 +70,8 @@ namespace RingMeasure {
         bool free_raw)
     {
         auto ss = scanLocationToString(scan_loc);
-        auto out = raw_recs[loc];
-        if(!out || out->empty())
+        auto & in = raw_recs[loc];
+        if(!in || in->empty())
         {
             SPDLOG_LOGGER_ERROR(logger, "No valid point cloud data for {} scan. Denoising aborted.", str(ss));
             return;
@@ -79,35 +79,23 @@ namespace RingMeasure {
         auto misc = getParam().misc;
 
         Eigen::Vector4f min_pt, max_pt;
-        pcl::getMinMax3D(*out, min_pt, max_pt);
-        SPDLOG_LOGGER_INFO(logger, "Reconstructed point cloud from {} scan: {} points.", str(ss), out->size());
+        pcl::getMinMax3D(*in, min_pt, max_pt);
+        SPDLOG_LOGGER_INFO(logger, "Reconstructed point cloud from {} scan: {} points.", str(ss), in->size());
         SPDLOG_LOGGER_TRACE(logger,"Bounding box of the reconstruction:");
         SPDLOG_LOGGER_TRACE(logger,"Min point (x_min,y_min,z_min): ({},{},{})", min_pt.x(), min_pt.y(), min_pt.z());
         SPDLOG_LOGGER_TRACE(logger,"Max point (x_max,y_max,z_max): ({},{},{})", max_pt.x(), max_pt.y(), max_pt.z());
+
+        pcl::PointCloud<pcl::PointXYZ>::Ptr downsampled = pcl::make_shared<pcl::PointCloud<pcl::PointXYZ>>();
         {
             // Downsample the point cloud using a voxel grid filter
             pcl::VoxelGrid<pcl::PointXYZ> vox;
-            vox.setInputCloud(out);
+            vox.setInputCloud(in);
             // set the resample to 1.0 would yield too index overflow.
             float resample = misc.leaf_size_before_EC; // Set downsampling for Euclidean clustering
             vox.setLeafSize(resample, resample, resample); // Set the voxel size (adjust as needed)
-            pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_filtered (new pcl::PointCloud<pcl::PointXYZ>);
-
-            status = false;
-            try {
-                vox.filter(*cloud_filtered);
-                status = true;
-            } catch (const std::exception& e) {
-                SPDLOG_LOGGER_ERROR(logger, "Voxel grid filtering failed: {}", e.what());
-                logger->flush();
-                return;
-            } catch (...) {
-                SPDLOG_LOGGER_ERROR(logger, "Voxel grid filtering failed due to an unknown error.");
-                logger->flush();
-                return;
-            }
-            out = cloud_filtered; // Use the downsampled cloud for further processing
-            SPDLOG_LOGGER_INFO(logger, "Downsampled point cloud for Euclidean clustering: {} points", out->size());
+            pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_filtered = pcl::make_shared<pcl::PointCloud<pcl::PointXYZ>>();
+            vox.filter(*downsampled);
+            SPDLOG_LOGGER_INFO(logger, "Downsampled point cloud for Euclidean clustering: {} points", downsampled->size());
         }
 
         if(free_raw)
@@ -121,24 +109,21 @@ namespace RingMeasure {
             prefix = std::string(processTypeToString(process_type)) + "_";
         }
 
-        pcl::PointCloud<pcl::PointXYZ>::Ptr out_denoised = ecExtract(out, 100, path_den, prefix);
+        pcl::PointCloud<pcl::PointXYZ>::Ptr ec_denoised = ecExtract(downsampled, 100, path_den, prefix);
         // write the point cloud to disk
         fs::path file_name = prefix + "original_recon_" + str(ss) + ".ply";
-        SPDLOG_LOGGER_DEBUG(logger, "Reconstructed point cloud from {} scan: {} points", str(ss), out->size());
-        #if RING_MEASURE_SAVE_PLY_TYPE == RING_MEASURE_SAVE_BIN
-            SPDLOG_EXEC(logger, spdl::info, pcl::io::savePLYFileBinary(path_den / (prefix + "Recon_Denoised.ply"), *out_denoised));
-            SPDLOG_EXEC(logger, spdl::debug, pcl::io::savePLYFileBinary(path_den / file_name, *out));
-        #else
-            SPDLOG_EXEC(logger, spdl::info, pcl::io::savePLYFileASCII(path_den / (prefix + "Recon_Denoised.ply"), *out_denoised));
-            SPDLOG_EXEC(logger, spdl::debug, pcl::io::savePLYFileASCII(path_den / file_name, *out));
-        #endif
+        SPDLOG_LOGGER_DEBUG(logger, "Reconstructed point cloud from {} scan: {} points", str(ss), downsampled->size());
+        SPDLOG_EXEC(logger, spdl::debug, savePLY(path_den / file_name, *downsampled));
         SPDLOG_LOGGER_DEBUG(logger, "Saving reconstructed point cloud to {}", path_den / file_name);
-        SPDLOG_LOGGER_INFO(logger, "Saving the selected EC denoised cluster to {}: {} points", path_den / (prefix + "Recon_Denoised.ply"), out_denoised->size());
+        downsampled.reset(); // Release the downsampled cloud to save memory
 
-      
+        SPDLOG_EXEC(logger, spdl::info, savePLY(path_den / (prefix + "recon_denoised.ply"), *ec_denoised));
+        SPDLOG_LOGGER_INFO(logger, "Saving the selected EC denoised cluster to {}: {} points",
+            path_den / (prefix + "Recon_Denoised.ply"), ec_denoised->size());
+
         // Further downsample the point cloud to estimate the normals
         pcl::VoxelGrid<pcl::PointXYZ> vox;
-        vox.setInputCloud(out_denoised);
+        vox.setInputCloud(ec_denoised);
         if(scan_loc == RingMeasure::ScanLocation::Under)
         {   
             auto resample = camera_resolution * misc.resample_ratio * misc.under_resampling_ratio_for_ne;
@@ -148,27 +133,18 @@ namespace RingMeasure {
             auto resample = camera_resolution * misc.resample_ratio * misc.io_resampling_ratio_for_ne;
             vox.setLeafSize(resample, resample, resample);
         }
-        pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_filtered (new pcl::PointCloud<pcl::PointXYZ>);
-        status = false;
-        try {
-            vox.filter(*out_denoised); // using the same buffer to store the downsampled cloud
-            status = true;
-        } catch (const std::exception& e) {
-            SPDLOG_LOGGER_ERROR(logger, "Voxel grid filtering failed: {}", e.what());
-            return;
-        } catch (...) {
-            SPDLOG_LOGGER_ERROR(logger, "Voxel grid filtering failed due to an unknown error.");
-            return;
-        }
-      
+        vox.filter(*ec_denoised); // using the same buffer to store the downsampled cloud
+
         auto & lateral = laterals[loc];
         auto & base = bases[loc];
-        rec_normals[loc] = normalSegmentation(out_denoised, path_seg, prefix, lateral, base);
+        rec_normals[loc] = normalSegmentation(ec_denoised, path_seg, prefix, lateral, base);
 
         if(getParam().misc.memory_save)
         {
             rec_normals[loc].reset();
-            SPDLOG_LOGGER_INFO(logger, "Memory saving mode is enabled. The point cloud with normals for scan {} is released.", scanLocationToString(scan_loc));
+            SPDLOG_LOGGER_INFO(logger, "Memory saving mode is enabled. "
+                "The point cloud with normals for scan {} is released.", 
+                scanLocationToString(scan_loc));
         }
     }
 
@@ -178,7 +154,8 @@ namespace RingMeasure {
         auto lateral = laterals[loc];
         if(!lateral || lateral->empty())
         {
-            SPDLOG_LOGGER_ERROR(logger, "No valid lateral point cloud data for {} scan. Rotation calibration aborted.", str(scanLocationToString(scan_loc)));
+            SPDLOG_LOGGER_ERROR(logger, "No valid lateral point cloud data for {} scan. "
+                "Rotation calibration aborted.", str(scanLocationToString(scan_loc)));
             return;
         }
           
@@ -234,37 +211,25 @@ namespace RingMeasure {
                 // save the slice to disk
                 fs::path filename = path_SAC / (std::to_string(i) + ".ply");
                 #if SPDLOG_LEVEL_TRACE >= SPDLOG_ACTIVE_LEVEL
-                    pcl::PointCloud<pcl::PointNormal>::Ptr cloud_subset(new pcl::PointCloud<pcl::PointNormal>);
+                    pcl::PointCloud<pcl::PointNormal>::Ptr cloud_subset = pcl::make_shared<pcl::PointCloud<pcl::PointNormal>>();
                     pcl::copyPointCloud(*lateral, slice_indices, *cloud_subset);
-                    #if RING_MEASURE_SAVE_PLY_TYPE == RING_MEASURE_SAVE_BIN
-                        SPDLOG_EXEC(logger, spdl::trace, pcl::io::savePLYFileBinary(filename, *cloud_subset));
-                    #else
-                        SPDLOG_EXEC(logger, spdl::trace, pcl::io::savePLYFileASCII(filename, *cloud_subset));
-                    #endif
+                    SPDLOG_EXEC(logger, spdl::trace, savePLY(filename, *cloud_subset));
                 #endif
             }
 
             if(slice_indices.size() > threshold)
             {    
-                pcl::PointIndices::Ptr inliers(new pcl::PointIndices);
-                pcl::ModelCoefficients::Ptr coefficients(new pcl::ModelCoefficients);
+                pcl::PointIndices::Ptr inliers = pcl::make_shared<pcl::PointIndices>();
+                pcl::ModelCoefficients::Ptr coefficients = pcl::make_shared<pcl::ModelCoefficients>();
 
                 seg.setIndices(std::make_shared<pcl::Indices>(slice_indices));
-                status = false;
-                try {
-                    seg.segment(*inliers, *coefficients);
-                    status = true;
-                } catch (const std::exception& e) {
-                    SPDLOG_LOGGER_ERROR(logger, "SACSegmentation failed: {}", e.what());
-                    return;
-                } catch (...) {
-                    SPDLOG_LOGGER_ERROR(logger, "SACSegmentation failed due to an unknown error.");
-                    return;
-                }
+                seg.segment(*inliers, *coefficients);
+
                 SPDLOG_LOGGER_TRACE(logger, "--- Estimated 3D Ellipse Parameters ---");
                 SPDLOG_LOGGER_TRACE(logger, "Original Point (x,y,z): ({}, {}, {})", 
                                    coefficients->values[0], coefficients->values[1], coefficients->values[2]);
-                SPDLOG_LOGGER_TRACE(logger, "Major Axis {:.4f} and minor Axis {:.4f} ", coefficients->values[3], coefficients->values[4]);
+                SPDLOG_LOGGER_TRACE(logger, "Major Axis {:.4f} and minor Axis {:.4f} ",
+                                   coefficients->values[3], coefficients->values[4]);
                 SPDLOG_LOGGER_TRACE(logger, "Normal of the Ellipse (nx,ny,nz): ({}, {}, {})", 
                                    coefficients->values[5], coefficients->values[6], coefficients->values[7]);
                 SPDLOG_LOGGER_TRACE(logger, "Direction of the Major Axis (dx,dy,dz): ({}, {}, {})", 
@@ -286,9 +251,9 @@ namespace RingMeasure {
         }
         if(points.size() < 2)
         {
-          SPDLOG_LOGGER_ERROR(logger, "Not enough points to fit a line. Need at least 2 points.");
-          status = false;
-          return ;
+            std::string error_msg = "Not enough points to fit a line. Need at least 2 points.";
+            SPDLOG_LOGGER_ERROR(logger, error_msg);
+            throw std::runtime_error(error_msg);
         }
 
         // fit line to estimate the angle
@@ -296,8 +261,10 @@ namespace RingMeasure {
         cv::fitLine (points, line, cv::DIST_HUBER, 0.0, 0.01, 0.01);
         cv::fitLine (points_major, line_major, cv::DIST_HUBER, 0.0, 0.01, 0.01);
         // calculate the angle of the line with respect to the horizontal axis
-        SPDLOG_LOGGER_INFO(logger,"[Major] Line coefficients: Normal vector ({}, {}), Point ({},{})", line_major[0], line_major[1], line_major[2], line_major[3]);
-        SPDLOG_LOGGER_INFO(logger,"[Minor] Line coefficients: Normal vector ({}, {}), Point ({},{})", line[0], line[1], line[2], line[3]);
+        SPDLOG_LOGGER_INFO(logger,"[Major] Line coefficients: Normal vector ({}, {}), Point ({},{})", 
+            line_major[0], line_major[1], line_major[2], line_major[3]);
+        SPDLOG_LOGGER_INFO(logger,"[Minor] Line coefficients: Normal vector ({}, {}), Point ({},{})",
+            line[0], line[1], line[2], line[3]);
 
         // These variables are used in the Python script to plot the profile and fit line.
         const int show = 0;
@@ -305,8 +272,10 @@ namespace RingMeasure {
         // put the break point after ret so path can be initialized before the Python script is called.
         // /py profile.plot_profile($show)
 
-        SPDLOG_LOGGER_INFO(logger, "[Major] Estimated angle of the cone: {} degrees.", std::acos(line_major[0]) * 180 / M_PI);
-        SPDLOG_LOGGER_INFO(logger, "[Minor] Estimated angle of the cone: {} degrees.", std::acos(line[0]) * 180 / M_PI);
+        SPDLOG_LOGGER_INFO(logger, "[Major] Estimated angle of the cone: {} degrees.",
+            std::acos(line_major[0]) * 180 / M_PI);
+        SPDLOG_LOGGER_INFO(logger, "[Minor] Estimated angle of the cone: {} degrees.",
+            std::acos(line[0]) * 180 / M_PI);
         angle_eval[loc][static_cast<size_t>(AxisType::MAJOR)] = std::array<float, 2>{line_major[0], line_major[1]};
         angle_eval[loc][static_cast<size_t>(AxisType::MINOR)] = std::array<float, 2>{line[0], line[1]};
         if(params.slices_mad_enabled && rm::PhaseType::VERI == phase_type)
@@ -329,27 +298,31 @@ namespace RingMeasure {
             mad_detector.fit();
             mad_detector.getInlierMean();
             radius_eval[loc][static_cast<size_t>(AxisType::MINOR)] = mad_detector.getInlierMean();
-            SPDLOG_LOGGER_INFO(logger, "[Major] MAD: Estimated radius of the line fitting: {}.", radius_eval[loc][static_cast<size_t>(AxisType::MAJOR)]);
-            SPDLOG_LOGGER_INFO(logger, "[Minor] MAD: Estimated radius of the line fitting: {}.", radius_eval[loc][static_cast<size_t>(AxisType::MINOR)]);
+            SPDLOG_LOGGER_INFO(logger, "[Major] MAD: Estimated radius of the line fitting: {}.",
+                radius_eval[loc][static_cast<size_t>(AxisType::MAJOR)]);
+            SPDLOG_LOGGER_INFO(logger, "[Minor] MAD: Estimated radius of the line fitting: {}.",
+                radius_eval[loc][static_cast<size_t>(AxisType::MINOR)]);
         }
     }
 
     void
     RingCalibration::caliTrans(fs::path path_SAC)
     {
-        auto base = bases[loc];
-        auto lateral = laterals[loc];
+        auto & base = bases[loc];
+        auto & lateral = laterals[loc];
         if(!base || base->empty())
         {
-            status = false;
-            SPDLOG_LOGGER_ERROR(logger, "No valid base point cloud data for {} scan. Translation calibration aborted.", str(scanLocationToString(scan_loc)));
-            return;
+            std::string error_msg = "No valid base point cloud data for " + str(scanLocationToString(scan_loc))
+                + " scan. Translation calibration aborted.";
+            SPDLOG_LOGGER_ERROR(logger, error_msg);
+            throw std::runtime_error(error_msg);
         }
         if(!lateral || lateral->empty())
         {
-            status = false;
-            SPDLOG_LOGGER_ERROR(logger, "No valid lateral point cloud data for {} scan. Translation calibration aborted.", str(scanLocationToString(scan_loc)));
-            return;
+            std::string error_msg = "No valid lateral point cloud data for " + str(scanLocationToString(scan_loc))
+                + " scan. Translation calibration aborted.";
+            SPDLOG_LOGGER_ERROR(logger, error_msg);
+            throw std::runtime_error(error_msg);
         }
         float diameter = measure.ring.dA;
         auto params = getParam().primitive;
@@ -359,21 +332,20 @@ namespace RingMeasure {
         Eigen::Vector4f min_pt, max_pt;
         pcl::getMinMax3D(*lateral, min_pt, max_pt);
         SPDLOG_LOGGER_TRACE(logger,"Bounding box of the lateral:");
-        SPDLOG_LOGGER_TRACE(logger,"Min point (x_min,y_min,z_min): ({},{},{})", min_pt.x(), min_pt.y(), min_pt.z());
-        SPDLOG_LOGGER_TRACE(logger,"Max point (x_max,y_max,z_max): ({},{},{})", max_pt.x(), max_pt.y(), max_pt.z());
+        SPDLOG_LOGGER_TRACE(logger,"Min point (x_min,y_min,z_min): ({},{},{})",
+            min_pt.x(), min_pt.y(), min_pt.z());
+        SPDLOG_LOGGER_TRACE(logger,"Max point (x_max,y_max,z_max): ({},{},{})",
+            max_pt.x(), max_pt.y(), max_pt.z());
         pcl::getMinMax3D(*base, min_pt, max_pt);
         SPDLOG_LOGGER_TRACE(logger,"Bounding box of the base:");
-        SPDLOG_LOGGER_TRACE(logger,"Min point (x_min,y_min,z_min): ({},{},{})", min_pt.x(), min_pt.y(), min_pt.z());
-        SPDLOG_LOGGER_TRACE(logger,"Max point (x_max,y_max,z_max): ({},{},{})", max_pt.x(), max_pt.y(), max_pt.z());
+        SPDLOG_LOGGER_TRACE(logger,"Min point (x_min,y_min,z_min): ({},{},{})",
+            min_pt.x(), min_pt.y(), min_pt.z());
+        SPDLOG_LOGGER_TRACE(logger,"Max point (x_max,y_max,z_max): ({},{},{})",
+            max_pt.x(), max_pt.y(), max_pt.z());
         SPDLOG_LOGGER_INFO(logger, "Saving the lateral point cloud to {}.", file_lateral);
         SPDLOG_LOGGER_INFO(logger, "Saving the base point cloud to {}.", file_base);
-        #if RING_MEASURE_SAVE_PLY_TYPE == RING_MEASURE_SAVE_BIN
-            SPDLOG_EXEC(logger, spdl::info, pcl::io::savePLYFileBinary(file_lateral, *lateral));
-            SPDLOG_EXEC(logger, spdl::info, pcl::io::savePLYFileBinary(file_base, *base));
-        #else
-            SPDLOG_EXEC(logger, spdl::info, pcl::io::savePLYFileASCII(file_lateral, *lateral));
-            SPDLOG_EXEC(logger, spdl::info, pcl::io::savePLYFileASCII(file_base, *base));
-        #endif
+        SPDLOG_EXEC(logger, spdl::info, savePLY(file_lateral, *lateral));
+        SPDLOG_EXEC(logger, spdl::info, savePLY(file_base, *base));
 
         // Setup Cylinder Segmentation
         // Note: The template uses <PointNormal, PointNormal> because the same cloud has both
@@ -393,21 +365,11 @@ namespace RingMeasure {
         seg.setInputCloud(lateral);
         seg.setInputNormals(lateral); 
 
-        pcl::ModelCoefficients::Ptr cylinder_coeff(new pcl::ModelCoefficients());
-        pcl::PointIndices::Ptr inliers(new pcl::PointIndices());
-        status = false;
-        try {
-            seg.segment(*inliers, *cylinder_coeff);
-            status = true;
-        } catch (const std::exception& e) {
-            SPDLOG_LOGGER_ERROR(logger, "SACSegmentation failed: {}", e.what());
-            return;
-        } catch (...) {
-            SPDLOG_LOGGER_ERROR(logger, "SACSegmentation failed due to an unknown error.");
-            return;
-        }
+        pcl::ModelCoefficients::Ptr cylinder_coeff = pcl::make_shared<pcl::ModelCoefficients>();
+        pcl::PointIndices::Ptr inliers = pcl::make_shared<pcl::PointIndices>();
+        seg.segment(*inliers, *cylinder_coeff);
     
-        pcl::PointCloud<pcl::PointNormal>::Ptr cylinder_cloud(new pcl::PointCloud<pcl::PointNormal>());
+        pcl::PointCloud<pcl::PointNormal>::Ptr cylinder_cloud = pcl::make_shared<pcl::PointCloud<pcl::PointNormal>>();
         // Output Results
         if (inliers->indices.empty()) {
             SPDLOG_LOGGER_ERROR(logger, "Could not estimate a cylindrical model, not enough inliners found.");
@@ -418,12 +380,9 @@ namespace RingMeasure {
             SPDLOG_LOGGER_TRACE(logger,"Min point (x_min,y_min,z_min): ({},{},{})", min_pt.x(), min_pt.y(), min_pt.z());
             SPDLOG_LOGGER_TRACE(logger,"Max point (x_max,y_max,z_max): ({},{},{})", max_pt.x(), max_pt.y(), max_pt.z());
             fs::path filename = path_SAC / "lateral_output.ply";
-            SPDLOG_LOGGER_INFO(logger, "Extracted lateral cloud with {}/{} points.", cylinder_cloud->size(), lateral->size());
-            #if RING_MEASURE_SAVE_PLY_TYPE == RING_MEASURE_SAVE_BIN
-                SPDLOG_EXEC(logger, spdl::debug, pcl::io::savePLYFileBinary(filename, *cylinder_cloud));
-            #else
-                SPDLOG_EXEC(logger, spdl::debug, pcl::io::savePLYFileASCII(filename, *cylinder_cloud));
-            #endif
+            SPDLOG_LOGGER_INFO(logger, "Extracted lateral cloud with {}/{} points.",
+                cylinder_cloud->size(), lateral->size());
+            SPDLOG_EXEC(logger, spdl::debug, savePLY(filename, *cylinder_cloud));
         }
     
         SPDLOG_LOGGER_INFO(logger, "--- Estimated Cylinder Parameters ---");
@@ -452,21 +411,11 @@ namespace RingMeasure {
         seg.setInputCloud(base);
         seg.setInputNormals(base);
 
-        pcl::ModelCoefficients::Ptr plane_coeff(new pcl::ModelCoefficients);
-        pcl::PointIndices::Ptr plane_inliers(new pcl::PointIndices);
-        try {
-            seg.segment(*plane_inliers, *plane_coeff);
-            status = true;
-        } catch (const std::exception& e) {
-            SPDLOG_LOGGER_ERROR(logger, "SACSegmentation failed: {}", e.what());
-            return;
-        } catch (...) {
-            SPDLOG_LOGGER_ERROR(logger, "SACSegmentation failed due to an unknown error.");
-            return;
-        }
+        pcl::ModelCoefficients::Ptr plane_coeff = pcl::make_shared<pcl::ModelCoefficients>();
+        pcl::PointIndices::Ptr plane_inliers = pcl::make_shared<pcl::PointIndices>();
+        seg.segment(*plane_inliers, *plane_coeff);
 
-
-        pcl::PointCloud<pcl::PointNormal>::Ptr plane_cloud(new pcl::PointCloud<pcl::PointNormal>());
+        pcl::PointCloud<pcl::PointNormal>::Ptr plane_cloud = pcl::make_shared<pcl::PointCloud<pcl::PointNormal>>();
         // Output Results
         if (plane_inliers->indices.empty()) {
             SPDLOG_LOGGER_INFO(logger, "Could not estimate a plane model.");
@@ -478,11 +427,7 @@ namespace RingMeasure {
             SPDLOG_LOGGER_TRACE(logger,"Max point (x_max,y_max,z_max): ({},{},{})", max_pt.x(), max_pt.y(), max_pt.z());
             fs::path filename = path_SAC / "plane_output.ply";
             SPDLOG_LOGGER_INFO(logger, "Extracted plane cloud with {}/{} points.", plane_cloud->size(), base->size());
-            #if RING_MEASURE_SAVE_PLY_TYPE == RING_MEASURE_SAVE_BIN
-                SPDLOG_EXEC(logger, spdl::debug, pcl::io::savePLYFileBinary(filename, *plane_cloud));
-            #else
-                SPDLOG_EXEC(logger, spdl::debug, pcl::io::savePLYFileASCII(filename, *plane_cloud));
-            #endif
+            SPDLOG_EXEC(logger, spdl::debug, savePLY(filename, *plane_cloud));
 
             SPDLOG_LOGGER_INFO(logger, "--- Plane Coefficients ---");
             SPDLOG_LOGGER_INFO(logger, "Normal Vector: ({}, {}, {}), Distance from origin: {}", 
@@ -513,13 +458,8 @@ namespace RingMeasure {
         // dump the cylinder before and after SAC estimation
         SPDLOG_LOGGER_TRACE(logger, "Saving the cylinder point cloud to {}.", path_SAC / "cylinder.ply");
         SPDLOG_LOGGER_DEBUG(logger, "Saving the segmented cylinder point cloud to {}.", path_SAC / "cylinder_output.ply");
-        #if RING_MEASURE_SAVE_PLY_TYPE == RING_MEASURE_SAVE_BIN
-            SPDLOG_EXEC(logger, spdl::trace, pcl::io::savePLYFileBinary(path_SAC / "cylinder.ply", *base + *lateral));
-            SPDLOG_EXEC(logger, spdl::debug, pcl::io::savePLYFileBinary(path_SAC / "cylinder_output.ply", *cylinder_cloud + *plane_cloud));
-        #else
-            SPDLOG_EXEC(logger, spdl::trace, pcl::io::savePLYFileASCII(path_SAC / "cylinder.ply", *base + *lateral));
-            SPDLOG_EXEC(logger, spdl::debug, pcl::io::savePLYFileASCII(path_SAC / "cylinder_output.ply", *cylinder_cloud + *plane_cloud));
-        #endif
+        SPDLOG_EXEC(logger, spdl::trace, savePLY(path_SAC / "cylinder.ply", *base + *lateral));
+        SPDLOG_EXEC(logger, spdl::debug, savePLY(path_SAC / "cylinder_output.ply", *cylinder_cloud + *plane_cloud));
     }
  
     void RingCalibration::
@@ -527,9 +467,10 @@ namespace RingMeasure {
                 const fs::path& path)
     {   
         if(!isReady()) {
-            status = false;
-            SPDLOG_LOGGER_ERROR(logger, "Calibration is not ready.\nPlease ensure that the system ans measure configurations are properly initialized.");
-            return;
+            std::string error_msg = "Calibration is not ready. " 
+                "Please ensure that the system and measure configurations are properly initialized.";
+            SPDLOG_LOGGER_ERROR(logger, error_msg);
+            throw std::runtime_error(error_msg);
         }
         auto ss = scanLocationToString(scan);
         setScanLoc(scan);
@@ -555,6 +496,7 @@ namespace RingMeasure {
         SPDLOG_LOGGER_INFO(logger, "Reconstruction for '{}' scan completed.", ss);
 
         SPDLOG_LOGGER_INFO(logger, "Starting the denoising for '{}' scan.", ss);
+        bases[loc].reset();
         laterals[loc].reset(new pcl::PointCloud<pcl::PointNormal>());
         denoise(path_den, path_seg, true);
         SPDLOG_LOGGER_INFO(logger, "Denoising for '{}' scan completed.", ss);
@@ -579,13 +521,13 @@ namespace RingMeasure {
         }
 
         bases[loc].reset(new pcl::PointCloud<pcl::PointNormal>());
+        laterals[loc].reset(new pcl::PointCloud<pcl::PointNormal>());
         SPDLOG_LOGGER_INFO(logger, "Starting the translation calibration for '{}' scan.", ss);
         setProcessType(rm::ProcessType::TRANS);
         reconstruct(path_den);
         denoise(path_den, path_seg, true);
         caliTrans(path_SAC);
         SPDLOG_LOGGER_INFO(logger, "Translation calibration for '{}' scan completed.", ss);
-
         if(param.misc.memory_save)
         {
             bases[loc].reset();
@@ -639,9 +581,10 @@ namespace RingMeasure {
                  bool profile)
     {
         if(!isReady()) {
-            status = false;
-            SPDLOG_LOGGER_ERROR(logger, "Calibration is not ready.\nPlease ensure that the system ans measure configurations are properly initialized.");
-            return;
+            std::string error_msg = "Verification is not ready. " 
+                "Please ensure that the system and measure configurations are properly initialized.";
+            SPDLOG_LOGGER_ERROR(logger, error_msg);
+            throw std::runtime_error(error_msg);
         }
         auto ss = scanLocationToString(scan);
         setScanLoc(scan);
@@ -682,9 +625,14 @@ namespace RingMeasure {
 
         SPDLOG_LOGGER_INFO(logger, "Starting the cylinder verification for '{}' scan.", ss);
         caliTrans(path_SAC);
-        SPDLOG_LOGGER_INFO(logger, "Cylinder verification for '{}' scan completed.", ss);
         
+        if(param.misc.memory_save)
+        {
+            bases[loc].reset();
+            laterals[loc].reset();
+        }
 
+        SPDLOG_LOGGER_INFO(logger, "Cylinder verification for '{}' scan completed.", ss);
         SPDLOG_LOGGER_INFO(logger, "Calibration for '{}' scan completed.\n", ss);
     }
 }

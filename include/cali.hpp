@@ -29,20 +29,6 @@ namespace RingMeasure {
              */
             RingCalibration() = default;
 
-            /**
-             * @brief Destroy the RingCalibration object and release allocated point cloud resources.
-             */
-            ~RingCalibration()
-            {
-                for (size_t i = 0; i < NUM; ++i)
-                {
-                    raw_recs[i].reset();
-                    laterals[i].reset();
-                    bases[i].reset();
-                    rec_normals[i].reset();
-                }
-            };
-
             /// @brief Evaluation metrics calculated for individual scan poses.
             enum class ScanMetrics{
                 H_PLANE_FIT,         ///< Base plane fit evaluation metric
@@ -223,9 +209,6 @@ namespace RingMeasure {
             rm::ParamTune getParam() const { return param; }
             void setParam(const rm::ParamTune &param_) { param = param_; }
 
-            void setStatus(bool newStatus) { status = newStatus; }
-            bool getStatus() const { return status; }
-
         protected:
             /**
              * @brief Checks if both measure and system configurations are ready for processing.
@@ -234,10 +217,14 @@ namespace RingMeasure {
                 return measure_ready && system_ready;
             }
 
+            /**
+             * @brief Sets the scan location and updates the corresponding index.
+             * @param scanLoc The new scan location.
+             */
             void setScanLoc(const ScanLocation &scanLoc)
             {
-                 scan_loc = scanLoc;
-                 loc = static_cast<size_t>(scanLoc);
+                scan_loc = scanLoc;
+                loc = static_cast<size_t>(scanLoc);
             }
 
             rm::ProcessType processType() const { return process_type; }
@@ -338,6 +325,5 @@ namespace RingMeasure {
             rm::ProcessType process_type;            ///< Active process type
             bool measure_ready = false;              ///< Flag indicating measure configuration readiness
             bool system_ready = false;               ///< Flag indicating system configuration readiness
-            bool status = true;
     };
 }

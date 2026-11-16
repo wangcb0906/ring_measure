@@ -156,7 +156,18 @@ main (int argc, char* argv[])
             CREATE_DIR(logger, path);
             for (const auto& scan : rm::SCAN_LOCS)
             {
-                cali.verification(scan, path, true);
+                try{
+                     cali.verification(scan, path, true);
+                }
+                catch(...){
+                    try {
+                        throw; // Re-throw the exception to capture it in the catch block below
+                    } catch (const std::exception& e) {
+                        SPDLOG_LOGGER_ERROR(logger, "Error: {}", e.what());
+                        cali.getLogger()->flush();
+                    } 
+                }
+
                 auto loc = static_cast<size_t>(scan);
                 eval_scan[loc][cali_idx][eval_idx] = cali.scanEval();
                 if(ring.string().find("_3_01") != std::string::npos || 
@@ -166,7 +177,7 @@ main (int argc, char* argv[])
                 }
                 if(cali_cfg_file.string().find("_3_01") != std::string::npos ||
                    cali_cfg_file.string().find("_0_75") != std::string::npos)
-                {   
+                {
                     eval_scan[loc][cali_idx][eval_idx][static_cast<size_t>(rm::RingCalibration::ScanMetrics::H_PLANE_FIT)] += 10;
                 }
             }

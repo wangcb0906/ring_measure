@@ -167,8 +167,12 @@ extern "C" {
         if (!ptr || !path) return false;
 
         std::filesystem::path fsPath(path);
-        ptr->calibration(scan, fsPath);
-        return ptr->getStatus();
+        try {
+            ptr->calibration(scan, fsPath);
+        } catch (...) {
+            return false;
+        }
+        return true;
     }
 
     EXPORT_API bool RM_RingCalibration_Verification(
@@ -179,8 +183,12 @@ extern "C" {
         if (!ptr || !path) return false;
 
         std::filesystem::path fsPath(path);
-        ptr->verification(scan, fsPath, false);
-        return ptr->getStatus();
+        try {
+            ptr->verification(scan, fsPath, false);
+        } catch (...) {
+            return false;
+        }
+        return true;
     }
    
     EXPORT_API bool RM_RingCalibration_GetSystemCorrection(

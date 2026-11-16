@@ -135,13 +135,21 @@ main (int argc, char* argv[])
         fs::path path = out_root / (measure.ring.type + "_" + ring.stem().string());
         for(const auto& scan : rm::SCAN_LOCS)
         {
-            if(cali_enabled)
-                cali.calibration(scan, path);
-            if(verify_enabled)
-                cali.verification(scan, path);
+            try{
+                if(cali_enabled)
+                    cali.calibration(scan, path);
+                if(verify_enabled)
+                    cali.verification(scan, path);
+            }
+            catch(...){
+                try {
+                    throw; // Re-throw the exception to capture it in the catch block below
+                } catch (const std::exception& e) {
+                    SPDLOG_LOGGER_ERROR(logger, "Error: {}", e.what());
+                    cali.getLogger()->flush();
+                } 
+            }
         }
-
-        // dumpConfig("stdout", cali.getSystem());
 
         SPDLOG_EXEC(logger, spdlog::level::debug, visualizeObliquity(cali,  path / "obliquity.ply"));
 
