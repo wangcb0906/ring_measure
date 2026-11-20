@@ -74,7 +74,7 @@ See in the internet how to add public key to your Github account.
 
 ## Clone the project
 
-Clone the project to your *$HOME* because we configurate the path of the toolchain based on $home. Otherwise, you have to reconfigure it when installing packages.
+Clone the project to your ```$HOME```, because we configurate the path of the toolchain based on ```$HOME```. Otherwise, you have to reconfigure it when installing packages.
 ``` shell
 git clone ...
 ```

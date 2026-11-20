@@ -4,9 +4,9 @@
 
 namespace RingMeasure {
 
-    const auto I = static_cast<size_t>(RingMeasure::ScanLocation::In);
-    const auto O = static_cast<size_t>(RingMeasure::ScanLocation::Out);
-    const auto U = static_cast<size_t>(RingMeasure::ScanLocation::Under);
+    const auto I = ScanLocation::In;
+    const auto O = ScanLocation::Out;
+    const auto U = ScanLocation::Under;
     
     void dumpConfig(const std::filesystem::path& sys_cfg,
                     const struct SystemCfg& sys)
@@ -158,7 +158,7 @@ namespace RingMeasure {
     }
 
     void dumpCorrection(const std::filesystem::path& correction_cfg,
-                        const std::array<ScanCfg, NUM>& scans,
+                        const EnumArray<ScanLocation, ScanCfg>& scans,
                         std::ios_base::openmode mode)
     {
         ini::IniFile correction_ini(correction_cfg.string());

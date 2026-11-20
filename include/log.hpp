@@ -1,5 +1,6 @@
 #pragma once
 
+#include <type_traits>
 #include <pcl/console/print.h>
 #include <spdlog/spdlog.h>
 #include <functional>
@@ -99,7 +100,8 @@ namespace RingMeasure
      * @return 0 on success, -1 on failure.
      */
     template <typename PointT>
-    inline int savePLY(const std::string& filename, const pcl::PointCloud<PointT>& cloud) {
+    inline int savePLY(const std::filesystem::path& filename, 
+                       const pcl::PointCloud<PointT>& cloud) {
         #if RING_MEASURE_SAVE_PLY_TYPE == RING_MEASURE_SAVE_BIN
             return pcl::io::savePLYFileBinary(filename, cloud);
         #else
@@ -107,3 +109,4 @@ namespace RingMeasure
         #endif
     }
 }
+

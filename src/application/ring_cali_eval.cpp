@@ -13,11 +13,12 @@
 #include "visualization.hpp"
 #include "application.hpp"
 
+namespace fs = std::filesystem;
+namespace rm = RingMeasure;
+
 int
 main (int argc, char* argv[])
 {
-    namespace fs = std::filesystem;
-    namespace rm = RingMeasure;
     // logger configuration
     auto logger=spdlog::default_logger();
     logger->set_pattern("[%Y-%m-%d %H:%M:%S] [%l] [%s:%#] %v");
@@ -59,11 +60,11 @@ main (int argc, char* argv[])
     CREATE_DIR(logger, measure_root);
 
     // Create a 3D grid where EVERY cell is a dynamic std::vector
-    boost::multi_array<rm::RingCalibration::ScanMetricsArray, 3> eval_scan(
+    boost::multi_array<rm::ScanMetricsArray, 3> eval_scan(
         boost::extents[static_cast<size_t>(rm::ScanLocation::NUM)]
         [calis.size()][evals.size()]
     );
-    boost::multi_array<rm::RingCalibration::ReconMetricsArray, 2> eval_recon(
+    boost::multi_array<rm::ReconMetricsArray, 2> eval_recon(
         boost::extents[calis.size()][evals.size()]
     );
 
@@ -93,10 +94,11 @@ main (int argc, char* argv[])
     #pragma omp parallel for schedule(dynamic)
     for (size_t cali_idx = 0; cali_idx < calis.size(); ++cali_idx) {
         
-        SPDLOG_LOGGER_INFO(logger, "Thread {} is processing calibration {}.", omp_get_thread_num(), calis[cali_idx]);
+        SPDLOG_LOGGER_INFO(logger, "Thread {} is processing calibration {}.",
+            omp_get_thread_num(), calis[cali_idx]);
 
         auto& cali_cfg_file = calis[cali_idx];
-        std::array<RingMeasure::ScanCfg, rm::NUM> cfgs_read;
+        rm::EnumArray<rm::ScanLocation, RingMeasure::ScanCfg> cfgs_read;
         if(binary)
         {
             auto binary_ini = cali_cfg_file.replace_extension(".bin");
@@ -169,30 +171,32 @@ main (int argc, char* argv[])
                 }
 
                 auto loc = static_cast<size_t>(scan);
-                eval_scan[loc][cali_idx][eval_idx] = cali.scanEval();
+                eval_scan[loc][cali_idx][eval_idx] = scanEval(cali);
                 if(ring.string().find("_3_01") != std::string::npos || 
                    ring.string().find("_0_75") != std::string::npos)
                 {
-                    eval_scan[loc][cali_idx][eval_idx][static_cast<size_t>(rm::RingCalibration::ScanMetrics::H_PLANE_FIT)] -= 10;
+                    eval_scan[loc][cali_idx][eval_idx][rm::ScanMetrics::H_PLANE_FIT] -= 10;
                 }
                 if(cali_cfg_file.string().find("_3_01") != std::string::npos ||
                    cali_cfg_file.string().find("_0_75") != std::string::npos)
                 {
-                    eval_scan[loc][cali_idx][eval_idx][static_cast<size_t>(rm::RingCalibration::ScanMetrics::H_PLANE_FIT)] += 10;
+                    eval_scan[loc][cali_idx][eval_idx][rm::ScanMetrics::H_PLANE_FIT] += 10;
                 }
             }
-            eval_recon[cali_idx][eval_idx] = cali.reconEval();
+            eval_recon[cali_idx][eval_idx] = reconEval(cali);
         }
         auto end_time = std::chrono::high_resolution_clock::now();
         auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
-        SPDLOG_LOGGER_INFO(logger, "Thread {} has finished processing the evaluation {}.", omp_get_thread_num(), cali_cfg_file);
+        SPDLOG_LOGGER_INFO(logger, "Thread {} has finished processing the evaluation {}.",
+            omp_get_thread_num(), cali_cfg_file);
         SPDLOG_LOGGER_INFO(logger, "Total execution time: {} ms", duration.count());
         logger->flush();
     }
 
     auto end = std::chrono::high_resolution_clock::now();
     auto total_duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
-    SPDLOG_LOGGER_INFO(spdlog::default_logger(), "Total execution time for all evaluations: {} ms", total_duration.count());
+    SPDLOG_LOGGER_INFO(spdlog::default_logger(),
+        "Total execution time for all evaluations: {} ms", total_duration.count());
 
     std::string path_str = measure_root.string();
     float da = ring_profile.dA/2;
@@ -204,37 +208,115 @@ main (int argc, char* argv[])
 
     // Write the evaluation results to a bianary file to enable release mode.
     // save 30 seconds to iterate.
-    std::ofstream scan_out((measure_root / "scan.bin").string(), std::ios::out | std::ios::binary | std::ios::trunc);
+    std::ofstream scan_out((measure_root / "scan.bin").string(), 
+        std::ios::out | std::ios::binary | std::ios::trunc);
     if (!scan_out.is_open()) {
         throw std::runtime_error("Failed to open file for binary writing: ");
     }
     const auto* shape = eval_scan.shape();
-    size_t scan_metrics_len = std::tuple_size<rm::RingCalibration::ScanMetricsArray>::value;
+    size_t scan_metrics_len = static_cast<size_t>(rm::ScanMetrics::NUM);
     size_t scan_full_shape[4] = { shape[0], shape[1], shape[2], scan_metrics_len };
     scan_out.write(reinterpret_cast<const char*>(scan_full_shape), 4 * sizeof(size_t));
     scan_out.write(reinterpret_cast<const char*>(metadata), sizeof(metadata));
     scan_out.write(
         reinterpret_cast<const char*>(eval_scan.data()), 
-        eval_scan.num_elements() * sizeof(rm::RingCalibration::ScanMetricsArray)
+        eval_scan.num_elements() * sizeof(rm::ScanMetricsArray)
     );
 
-    std::ofstream recon_out((measure_root / "recon.bin").string(), std::ios::out | std::ios::binary | std::ios::trunc);
+    std::ofstream recon_out((measure_root / "recon.bin").string(),
+        std::ios::out | std::ios::binary | std::ios::trunc);
     if (!recon_out.is_open()) {
         throw std::runtime_error("Failed to open file for binary writing ");
     }
     shape = eval_recon.shape();
-    size_t rec_metrics_len = std::tuple_size<rm::RingCalibration::ReconMetricsArray>::value;
+    size_t rec_metrics_len = static_cast<size_t>(rm::ReconMetrics::NUM);
     size_t recon_full_shape[3] = { shape[0], shape[1], rec_metrics_len };
     recon_out.write(reinterpret_cast<const char*>(recon_full_shape), 3 * sizeof(size_t));
     recon_out.write(reinterpret_cast<const char*>(metadata), sizeof(metadata));
     recon_out.write(
         reinterpret_cast<const char*>(eval_recon.data()), 
-        eval_recon.num_elements() * sizeof(rm::RingCalibration::ReconMetricsArray)
+        eval_recon.num_elements() * sizeof(rm::ReconMetricsArray)
     );
 
-    SPDLOG_LOGGER_INFO(spdlog::default_logger(), "Finished processing the measure configuration folder: {}", eval_path);
+    SPDLOG_LOGGER_INFO(spdlog::default_logger(), 
+        "Finished processing the measure configuration folder: {}", eval_path);
 
     // flush all the logs and terminate the threads safely.
     spdlog::shutdown();
     return (0);
+}
+
+namespace RingMeasure{
+    rm::ReconMetricsArray reconEval(const rm::RingCalibration& cali) {
+    
+        auto cyl_fit = cali.cylFit();
+        auto base_fit = cali.baseFit();
+        rm::EnumArray<rm::ScanLocation, Eigen::Vector2f> center_points;
+        std::transform(
+            cyl_fit.begin(), cyl_fit.end(), center_points.begin(), 
+            [](const rm::CYLFitMetricTuple& t) 
+            {
+                return Eigen::Vector2f{std::get<1>(t).x(), std::get<1>(t).z()};
+            }
+        );
+        rm::EnumArray<rm::ScanLocation, Eigen::Vector3f> axises;
+        std::transform(
+            cyl_fit.begin(), cyl_fit.end(), axises.begin(), 
+            [](const rm::CYLFitMetricTuple& t)
+            {
+                return std::get<1>(t);
+            }
+        );
+        rm::EnumArray<rm::ScanLocation, Eigen::Vector3f> base_normals; 
+        std::transform(
+            base_fit.begin(), base_fit.end(), base_normals.begin(),
+            [](const rm::BaseFitMetricTuple& t)
+            {
+                return std::get<1>(t);
+            }
+        );
+        // distance(max), cos(min), cos(min) 
+        rm::ReconMetricsArray ret{0.0, 2.0, 2.0};
+        for (size_t i = 0; i < center_points.size(); ++i)
+            for (size_t j = i + 1; j < center_points.size(); ++j){
+                ret[rm::ReconMetrics::CENTER_CYL_FIT] = 
+                   std::max(ret[rm::ReconMetrics::CENTER_CYL_FIT],
+                            (center_points[i] - center_points[j]).norm());
+                ret[rm::ReconMetrics::AXIS_CYL_FIT] = 
+                    std::min(ret[rm::ReconMetrics::AXIS_CYL_FIT],
+                             std::abs(axises[i].dot(axises[j])));
+                ret[rm::ReconMetrics::BASE_PARALLELISM] = 
+                    std::min(ret[rm::ReconMetrics::BASE_PARALLELISM],
+                             std::abs(base_normals[i].dot(base_normals[j])));
+            }
+        ret[rm::ReconMetrics::AXIS_CYL_FIT] = 
+            std::acos(ret[rm::ReconMetrics::AXIS_CYL_FIT]) * 180.0 / M_PI;
+        ret[rm::ReconMetrics::BASE_PARALLELISM] = 
+            std::acos(ret[rm::ReconMetrics::BASE_PARALLELISM]) * 180.0 / M_PI;
+        return ret; 
+    }
+    
+    
+    rm::ScanMetricsArray scanEval(const rm::RingCalibration& cali){
+    
+        using std::acos;
+        using std::get;
+        auto loc      = cali.getLoc();
+        auto angle    = cali.getAngle();
+        auto radius   = cali.getRadius();
+        auto cyl_fit  = cali.cylFit();
+        auto base_fit = cali.baseFit();
+        rm::ScanMetricsArray ret{0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
+        ret[rm::ScanMetrics::ANGLE_MAJOR_LINE_FIT] = 
+            std::acos(angle[loc][rm::AxisType::MAJOR][0]) * 180.0 / M_PI;
+        ret[rm::ScanMetrics::ANGLE_MINOR_LINE_FIT] = 
+            std::acos(angle[loc][rm::AxisType::MINOR][0]) * 180.0 / M_PI;
+        ret[rm::ScanMetrics::ANGLE_MINOR_LINE_FIT] = 
+            std::acos(angle[loc][rm::AxisType::MINOR][0]) * 180.0 / M_PI;
+        ret[rm::ScanMetrics::RADIUS_MAJOR_LINE_FIT] = radius[loc][rm::AxisType::MAJOR];
+        ret[rm::ScanMetrics::RADIUS_MINOR_LINE_FIT] = radius[loc][rm::AxisType::MINOR];
+        ret[rm::ScanMetrics::RADIUS_CYL_FIT] = get<0>(cyl_fit[loc]);
+        ret[rm::ScanMetrics::H_PLANE_FIT] = get<0>(base_fit[loc]);
+        return ret;
+    }
 }

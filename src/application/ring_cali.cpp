@@ -92,7 +92,8 @@ main (int argc, char* argv[])
         rm::RingCalibration cali;
         fs::path ring = measure_cfg_file.filename();
         if(single_cfg_file && !program.get<std::string>("--suffix").empty()){
-            ring = ring.stem().string() + "_" + program.get<std::string>("--suffix") + ring.extension().string();
+            ring = ring.stem().string() + "_" + program.get<std::string>("--suffix")
+            + ring.extension().string();
         }
 
         auto log_file = log_path / (ring.stem().string() + ".log");
@@ -108,7 +109,8 @@ main (int argc, char* argv[])
         auto start_time = std::chrono::high_resolution_clock::now();
         SPDLOG_LOGGER_WARN(logger, "Starting calibration...");
         SPDLOG_LOGGER_INFO(logger, "Processing Ring {}", measure_cfg_file.stem());
-        SPDLOG_LOGGER_INFO(spdlog::default_logger(), "Thread {:2d} is processing Ring {}", omp_get_thread_num(), measure_cfg_file.stem());
+        SPDLOG_LOGGER_INFO(spdlog::default_logger(), "Thread {:2d} is processing Ring {}",
+            omp_get_thread_num(), measure_cfg_file.stem());
         spdlog::default_logger()->flush();
         rm::MeasureCfg measure;
         rm::loadMeasureConfig(measure_cfg_file, measure);
@@ -187,17 +189,22 @@ main (int argc, char* argv[])
 
     auto end = std::chrono::high_resolution_clock::now();
     auto total_duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
-    SPDLOG_LOGGER_INFO(spdlog::default_logger(), "Total execution time for all calibrations: {} ms", total_duration.count());
+    SPDLOG_LOGGER_INFO(spdlog::default_logger(),
+        "Total execution time for all calibrations: {} ms", total_duration.count());
 
     if(single_cfg_file)
     {
-        SPDLOG_LOGGER_INFO(spdlog::default_logger(), "Finished processing the measure configuration file: {}", single_cfg_file.value());
+        SPDLOG_LOGGER_INFO(spdlog::default_logger(),
+            "Finished processing the measure configuration file: {}", single_cfg_file.value());
     }
     else
     {   
-        SPDLOG_LOGGER_INFO(spdlog::default_logger(), "Dumping the parameter file for the measure configuration folder: {}", root);
-        dumpParam(root / (out_root.filename().string() + ".ini"), param, std::ios_base::out | std::ios::trunc);
-        SPDLOG_LOGGER_INFO(spdlog::default_logger(), "Finished processing the measure configuration folder: {}", root);
+        SPDLOG_LOGGER_INFO(spdlog::default_logger(),
+            "Dumping the parameter file for the measure configuration folder: {}", root);
+        dumpParam(root / (out_root.filename().string() + ".ini"),
+            param, std::ios_base::out | std::ios::trunc);
+        SPDLOG_LOGGER_INFO(spdlog::default_logger(),
+            "Finished processing the measure configuration folder: {}", root);
     }
     // flush all the logs and terminate the threads safely.
     spdlog::shutdown();

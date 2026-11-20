@@ -79,15 +79,18 @@ extern "C" {
     /// @brief Interop struct for image configuration.
     struct ImgCfgInterop {
         char path[RM_MAX_PATH_LEN];
-        char imgs[rm::NUM][RM_MAX_PATH_LEN];     ///< Flat array for filenames per location
-        char luma_imgs[rm::NUM][RM_MAX_PATH_LEN]; ///< Flat array for luminance filenames per location
+        ///< Flat array for filenames per location
+        char imgs[static_cast<size_t>(rm::ScanLocation::NUM)][RM_MAX_PATH_LEN];
+        ///< Flat array for luminance filenames per location
+        char luma_imgs[static_cast<size_t>(rm::ScanLocation::NUM)][RM_MAX_PATH_LEN]; 
     };
    
     /// @brief Interop struct for measurement configuration.
     struct MeasureCfgInterop {
         ImgCfgInterop img;
-        RingCfgInterop ring;                        ///< Assumed to be a blittable struct already
-        std::array<rm::Point2f, rm::NUM> robot_pos; ///< Safe! Stays as-is
+        RingCfgInterop ring;   ///< Assumed to be a blittable struct already
+        ///< Safe! Stays as-is
+        rm::EnumArray<rm::ScanLocation, rm::Point2f> robot_pos;
     };
 
     /**

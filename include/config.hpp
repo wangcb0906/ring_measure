@@ -8,6 +8,47 @@ namespace RingMeasure{
 
     using str = std::string;
 
+    // Primary template: defaults to false
+    template <typename T, typename = void>
+    struct has_num : std::false_type {};
+    
+    // Specialization: succeeds only if T::NUM is a valid expression
+    template <typename T>
+    struct has_num<T, std::void_t<decltype(T::NUM)>> : std::true_type {};
+    
+    template <typename T>
+    inline constexpr bool has_num_v = has_num<T>::value;
+    
+    /**
+     * @struct  EnumArray
+     * @brief   std::array wrapper that supports indexing via `enum` keys.
+     * @details Inherits from `std::array<T, N>` to preserve all features, 
+     *              and standard container traits while overloading `operator[]`
+     *              with zero runtime overhead.
+     * @tparam  Enum Scoped enumeration type used as the index key. Must define 
+     *          a trailing `NUM` enumerator if the default size parameter is used.
+     * @tparam  T The element type stored in the array.
+     * @tparam  N The number of elements in the array (static_cast<size_t>(NUM)).
+     * @note    Enumerators must be contiguous and zero-based (0, 1, ..., NUM-1).
+     */
+    template <typename Enum, typename T, size_t N = static_cast<size_t>(Enum::NUM)>
+    struct EnumArray : std::array<T, N> {
+        static_assert(has_num_v<Enum> || N != 0,
+                      "Enum must define a 'NUM' enumerator (or specify size N explicitly).");
+        constexpr T& operator[](Enum e) noexcept {
+            return std::array<T, N>::operator[](static_cast<size_t>(e));
+        }
+        constexpr T& operator[](size_t idx) noexcept {
+            return std::array<T, N>::operator[](idx);
+        }
+        constexpr const T& operator[](Enum e) const noexcept {
+            return std::array<T, N>::operator[](static_cast<size_t>(e));
+        }
+        constexpr const T& operator[](size_t idx) const noexcept {
+            return std::array<T, N>::operator[](idx);
+        }
+    };
+
     /// @brief Scan location options relative to the measurement setup.
     enum class ScanLocation
     {
@@ -24,7 +65,7 @@ namespace RingMeasure{
     /**
      * @brief Array of all scan locations.
      */
-    constexpr std::array<ScanLocation, static_cast<size_t>(ScanLocation::NUM)> SCAN_LOCS = {
+    constexpr EnumArray<ScanLocation, ScanLocation> SCAN_LOCS = {
         ScanLocation::In,
         ScanLocation::Out,
         ScanLocation::Under
@@ -39,11 +80,8 @@ namespace RingMeasure{
         MAJOR,
         /// Minor axis of the ellipse
         MINOR,
-        Axis_NUM
+        NUM
     };
-
-    const auto NUM = static_cast<size_t>(ScanLocation::NUM);
-    const auto axis_num = static_cast<size_t>(AxisType::Axis_NUM);
 
     /**
      * @brief Converts a ScanLocation enum value to its string representation.
@@ -76,6 +114,7 @@ namespace RingMeasure{
         FR,
         /// Radreifen
         RR,
+        NUM,
     };
 
     /**
@@ -106,6 +145,7 @@ namespace RingMeasure{
         ROT, 
         /// Translation calibration process type.
         TRANS,
+        NUM
     };
 
     /**
@@ -135,6 +175,7 @@ namespace RingMeasure{
         CALI,
         /// Verification phase
         VERI,
+        NUM
     };
 
     /**
@@ -167,6 +208,9 @@ namespace RingMeasure{
         int valid_len;      ///< Valid data length threshold, 720
         float z_pitch;      ///< Z-axis pitch distance
         float z_oft;        ///< Z-axis offset value
+        float pitch_scale;
+        float pitch_offset;
+        float cam_res;      ///< Camera resolution
         float x_pitch;      ///< X-axis pitch distance
         std::string unit;   ///< Measurement unit string (e.g., mm)
         float mount_height; ///< Physical mounting height of the sensor relative to the camera.
@@ -181,14 +225,14 @@ namespace RingMeasure{
         float y;
 
         Point2f() = default;
-        Point2f(const Point2f &val) : x(val.x), y(val.y) {}
+        Point2f(const Point2f &val) = default;
         Point2f(float x_, float y_) : x(x_), y(y_) {}
 
-        friend Point2f operator+(Point2f& lhs, const Point2f& rhs)
+        friend Point2f operator+(const Point2f& lhs, const Point2f& rhs)
         {
             return Point2f{lhs.x + rhs.x, lhs.y + rhs.y};
         }
-        friend Point2f operator-(Point2f& lhs, const Point2f& rhs)
+        friend Point2f operator-(const Point2f& lhs, const Point2f& rhs)
         {
             return Point2f{lhs.x - rhs.x, lhs.y - rhs.y};
         }
@@ -211,11 +255,11 @@ namespace RingMeasure{
      */    
     struct ScanCfg
     {
-        float view_angle{0.0f}; ///< View angle (va) in degrees
-        float angle_corr{0.0f}; ///< Angle correction offset
-        Point2f pos_corr{0.0f, 0.0f}; ///< Position correction offset (X, Y)
+        float view_angle; ///< View angle (va) in degrees
+        float angle_corr; ///< Angle correction offset
+        Point2f pos_corr; ///< Position correction offset (X, Y)
         ScanCfg() = default;
-        ScanCfg(const ScanCfg &val) : view_angle(val.view_angle), angle_corr(val.angle_corr), pos_corr(val.pos_corr) {}
+        ScanCfg(const ScanCfg &val) = default;
         ScanCfg(float va, float ac, Point2f pc) : view_angle(va), angle_corr(ac), pos_corr(pc) {}
     };
 
@@ -225,7 +269,7 @@ namespace RingMeasure{
     struct RobotCfg
     {    
         /**< Array of scan configurations per location */
-        std::array<ScanCfg, NUM> scans;
+        EnumArray<ScanLocation, ScanCfg> scans;
         Point2f arm;                    ///< Robot arm coordinate offset
         float dist;                     ///< Operating distance parameter
         float table_h;                  ///< Roll table height configuration
@@ -249,8 +293,10 @@ namespace RingMeasure{
     struct ImgCfg 
     {
         std::filesystem::path path;    ///< Base path for image files
-        std::array<std::string, NUM> imgs;     ///< Standard image filenames per location
-        std::array<std::string, NUM> luma_imgs;///< Luminance image filenames per location
+        EnumArray<ScanLocation, std::string> imgs;
+        ///< Standard image filenames per location
+        EnumArray<ScanLocation, std::string> luma_imgs;
+        ///< Luminance image filenames per location
     };
     
     /**
@@ -267,6 +313,7 @@ namespace RingMeasure{
         float dI;             ///< Inner diameter configuration
         float dA;             ///< Outer diameter configuration
         float h;              ///< Height configuration
+        float mid_height;     ///< Middle height of the scan
     };
 
     /**
@@ -276,7 +323,7 @@ namespace RingMeasure{
     {
         ImgCfg img;                     ///< Image configuration and paths
         RingCfg ring;                   ///< Target ring parameters
-        std::array<Point2f, NUM> robot_pos; ///< Robot coordinate positions per location
+        EnumArray<ScanLocation, Point2f> robot_pos; ///< Robot coordinate positions per location
     };
 
     /**
@@ -315,6 +362,6 @@ namespace RingMeasure{
      * @param mode File open mode.
      */
     void dumpCorrection(const std::filesystem::path& correction_cfg,
-                        const std::array<ScanCfg, NUM>& scans,
+                        const EnumArray<ScanLocation, ScanCfg>& scans,
                         std::ios_base::openmode mode = std::ios_base::out);
 }

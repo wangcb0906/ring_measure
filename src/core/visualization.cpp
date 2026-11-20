@@ -10,7 +10,7 @@ namespace RingMeasure
         const std::vector<pcl::PointIndices>& cluster_indices) 
     {
         // Create the output colored point cloud
-        pcl::PointCloud<pcl::PointXYZRGB>::Ptr colored_cloud(new pcl::PointCloud<pcl::PointXYZRGB>);
+        PcPtr<pcl::PointXYZRGB> colored_cloud(new pcl::PointCloud<pcl::PointXYZRGB>);
 
         for (const auto& cluster : cluster_indices) {
             // Generate a random color for the current cluster
@@ -44,7 +44,7 @@ namespace RingMeasure
                             const std::shared_ptr<spdlog::logger> &logger)
     {
         assert(cloud->size() && "All points have NaN or Inf curvature values.");
-        pcl::PointCloud<pcl::PointXYZRGB>::Ptr colored_cloud(new pcl::PointCloud<pcl::PointXYZRGB>);
+        auto colored_cloud(new pcl::PointCloud<pcl::PointXYZRGB>);
         colored_cloud->resize(cloud->size());
 
         if(std::abs(thld) < 1e-6f){
@@ -58,7 +58,8 @@ namespace RingMeasure
             float min_curv = min_it->curvature;
             float max_curv = max_it->curvature;
             float curv_range = (max_curv == min_curv) ? 1.0f : (max_curv - min_curv);
-            SPDLOG_LOGGER_DEBUG(logger, "Curvature range: min = {}, max = {}, range = {}", min_curv, max_curv, curv_range);
+            SPDLOG_LOGGER_DEBUG(logger, "Curvature range: min = {}, max = {}, range = {}",
+                min_curv, max_curv, curv_range);
     
             for(size_t i = 0; i < cloud->size(); ++i){
                 const auto& src = cloud->points[i];
@@ -78,7 +79,8 @@ namespace RingMeasure
                 dest.b = static_cast<uint8_t>((1.0f - normalized_curv) * 255);
             }
         } else {
-            SPDLOG_LOGGER_DEBUG(logger, "Using provided curvature threshold: {} to bianrize the point cloud.", thld);
+            SPDLOG_LOGGER_DEBUG(logger, "Using provided curvature threshold:"
+                " {} to bianrize the point cloud.", thld);
             for(size_t i = 0; i < cloud->size(); ++i){
                 const auto& src = cloud->points[i];
                 auto& dest = colored_cloud->points[i];
@@ -107,7 +109,7 @@ namespace RingMeasure
                          std::filesystem::path ply_path,
                          const std::shared_ptr<spdlog::logger> &logger)
     {
-        pcl::PointCloud<pcl::PointXYZRGB>::Ptr colored_cloud(new pcl::PointCloud<pcl::PointXYZRGB>);
+        auto colored_cloud(new pcl::PointCloud<pcl::PointXYZRGB>);
         colored_cloud->resize(cloud->size());
 
         SPDLOG_LOGGER_DEBUG(logger, "Max-min colorize the normal point cloud.");
@@ -120,7 +122,8 @@ namespace RingMeasure
         float min_normal = std::abs(min_it->normal_y);
         float max_normal = std::abs(max_it->normal_y);
         float normal_range = (max_normal == min_normal) ? 1.0f : (max_normal - min_normal);
-        SPDLOG_LOGGER_DEBUG(logger, "Normal range: min = {}, max = {}, range = {}", min_normal, max_normal, normal_range);
+        SPDLOG_LOGGER_DEBUG(logger, "Normal range: min = {}, max = {}, range = {}",
+            min_normal, max_normal, normal_range);
     
         for(size_t i = 0; i < cloud->size(); ++i){
             const auto& src = cloud->points[i];
@@ -148,8 +151,8 @@ namespace RingMeasure
     visualizeObliquity(const RingCalibration& cali, fs::path ply_path)
     {   
         auto bases = cali.getBases();
-        std::array<pcl::PointCloud<pcl::PointXYZRGB>::Ptr, NUM> clouds;
-        for(int i = 0; i < NUM; ++i)
+        EnumArray<ScanLocation, PcPtr<pcl::PointXYZRGB>> clouds;
+        for(int i = 0; i < static_cast<int>(ScanLocation::NUM); ++i)
         {
             if(!bases[i] || bases[i]->empty())
             {
@@ -183,7 +186,8 @@ namespace RingMeasure
             }
         }
         SPDLOG_LOGGER_TRACE(cali.getLogger(), "Saving the obliquity visualization to {}.", ply_path);
-        SPDLOG_EXEC(cali.getLogger(), spdlog::level::trace, savePLY(ply_path.string(), *clouds[0] + *clouds[1] + *clouds[2]));
+        SPDLOG_EXEC(cali.getLogger(), spdlog::level::trace, savePLY(ply_path.string(),
+                    *clouds[0] + *clouds[1] + *clouds[2]));
     }
 #endif
 }

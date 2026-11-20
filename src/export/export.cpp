@@ -14,7 +14,10 @@ extern "C" {
         }
     }
 
-    EXPORT_API bool RM_RingCalibration_SetSystem(rm::RingCalibration* ptr, const SystemCfgInterop* interopSystem) {
+    EXPORT_API bool RM_RingCalibration_SetSystem(
+        rm::RingCalibration* ptr, 
+        const SystemCfgInterop* interopSystem) 
+    {
         if (!ptr || !interopSystem) {
             return false;
         }
@@ -76,7 +79,7 @@ extern "C" {
         
         richCfg.img.path = interopCfg->img.path;
 
-        for (int i = 0; i < rm::NUM; ++i) {
+        for (int i = 0; i < static_cast<size_t>(rm::ScanLocation::NUM); ++i) {
             richCfg.img.imgs[i] = interopCfg->img.imgs[i];
             richCfg.img.luma_imgs[i] = interopCfg->img.luma_imgs[i];
         }
@@ -108,20 +111,24 @@ extern "C" {
         std::strncpy(outInteropCfg->img.path, pathStr.c_str(), sizeof(outInteropCfg->img.path));
         outInteropCfg->img.path[sizeof(outInteropCfg->img.path) - 1] = '\0';
 
-        for (int i = 0; i < rm::NUM; ++i) {
-            std::strncpy(outInteropCfg->img.imgs[i], richCfg.img.imgs[i].c_str(), sizeof(outInteropCfg->img.imgs[i]));
+        for (int i = 0; i < static_cast<size_t>(rm::ScanLocation::NUM); ++i) {
+            std::strncpy(outInteropCfg->img.imgs[i], richCfg.img.imgs[i].c_str(),
+                         sizeof(outInteropCfg->img.imgs[i]));
             outInteropCfg->img.imgs[i][sizeof(outInteropCfg->img.imgs[i]) - 1] = '\0';
 
-            std::strncpy(outInteropCfg->img.luma_imgs[i], richCfg.img.luma_imgs[i].c_str(), sizeof(outInteropCfg->img.luma_imgs[i]));
+            std::strncpy(outInteropCfg->img.luma_imgs[i], richCfg.img.luma_imgs[i].c_str(),
+                         sizeof(outInteropCfg->img.luma_imgs[i]));
             outInteropCfg->img.luma_imgs[i][sizeof(outInteropCfg->img.luma_imgs[i]) - 1] = '\0';
         }
 
         outInteropCfg->ring.isTured = richCfg.ring.isTured;
        
-        std::strncpy(outInteropCfg->ring.spk_form, richCfg.ring.spk_form.c_str(), sizeof(outInteropCfg->ring.spk_form));
+        std::strncpy(outInteropCfg->ring.spk_form, richCfg.ring.spk_form.c_str(),
+                     sizeof(outInteropCfg->ring.spk_form));
         outInteropCfg->ring.spk_form[sizeof(outInteropCfg->ring.spk_form) - 1] = '\0';
 
-        std::strncpy(outInteropCfg->ring.type, richCfg.ring.type.c_str(), sizeof(outInteropCfg->ring.type));
+        std::strncpy(outInteropCfg->ring.type, richCfg.ring.type.c_str(),
+                     sizeof(outInteropCfg->ring.type));
         outInteropCfg->ring.type[sizeof(outInteropCfg->ring.type) - 1] = '\0';
 
         outInteropCfg->ring.mke_top = richCfg.ring.mke_top;
@@ -196,13 +203,14 @@ extern "C" {
         rm::ScanCfg* outBuffer,
         int bufferSize)
     {
-        if (!ptr || !outBuffer || bufferSize != rm::NUM) {
+        if (!ptr || !outBuffer || bufferSize != static_cast<size_t>(rm::ScanLocation::NUM)) {
             return false;
         }
 
-        std::array<rm::ScanCfg, rm::NUM> correction = ptr->getSystemCorrection();
+        std::array<rm::ScanCfg, static_cast<size_t>(rm::ScanLocation::NUM)> correction 
+            = ptr->getSystemCorrection();
 
-        for (size_t i = 0; i < rm::NUM; ++i) {
+        for (size_t i = 0; i < static_cast<size_t>(rm::ScanLocation::NUM); ++i) {
             outBuffer[i] = correction[i];
         }
         return true;
@@ -213,12 +221,12 @@ extern "C" {
         const rm::ScanCfg* correctionArray,
         int arraySize)
     {
-        if (!ptr || !correctionArray || arraySize != rm::NUM) {
+        if (!ptr || !correctionArray || arraySize != static_cast<size_t>(rm::ScanLocation::NUM)) {
             return false;
         }
-        std::array<rm::ScanCfg, rm::NUM> correction;
+        rm::EnumArray<rm::ScanLocation, rm::ScanCfg> correction;
        
-        for (size_t i = 0; i < rm::NUM; ++i) {
+        for (size_t i = 0; i < static_cast<size_t>(rm::ScanLocation::NUM); ++i) {
             correction[i] = correctionArray[i];
         }
 

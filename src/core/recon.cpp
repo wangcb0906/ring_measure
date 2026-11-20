@@ -6,54 +6,52 @@
 #include <pcl/point_types.h>
 #include <pcl/common/transforms.h>
 #include <spdlog/spdlog.h>
-
 #include <tiffio.h>
 
 #include "cali.hpp"
 
 void RingMeasure::RingCalibration::reconstruct(const fs::path& path_)
 {
-    auto IDX = static_cast<size_t>(scan_loc);
-    int is_under = (scan_loc == RingMeasure::ScanLocation::Under) ? -1 : 1;
-    const std::string &scan = (measure.img.path / measure.img.imgs[IDX]).string();
+    int is_under = (loc == RingMeasure::ScanLocation::Under) ? -1 : 1;
+    const std::string &scan = (measure.img.path / measure.img.imgs[loc]).string();
 
     TIFF* tif = TIFFOpen(scan.c_str(), "r");
     if (!tif) {
         throw std::runtime_error("Failed to open TIFF file: " + scan);
     }
-
+    auto & sensor = system.sensor;
+    auto & scans = system.robot.scans;
     // In the real world transformation, the camera first have a 
     // translation w.r.t the world coord origin, then a rotation w.r.t. 
     // to camera coord orgin. When we reverse the transformation,
     // we also inverse the order.
 
-    // create the 2D rotation matrix to transfer from camera coord to world corrd
+    // 2D rotation matrix to transfer from camera coord to world corrd
     float angle = is_under * (90.0f 
-                             + system.robot.scans[IDX].view_angle
-                             + system.robot.scans[IDX].angle_corr);
+                + scans[loc].view_angle + scans[loc].angle_corr);
     double alpha = std::cos(angle*M_PI/180.0);
     double beta = std::sin(angle*M_PI/180.0);
-    auto pos = measure.robot_pos[IDX] + system.robot.scans[IDX].pos_corr;
+    auto pos = measure.robot_pos[loc] + scans[loc].pos_corr;
 
     Eigen::Matrix4f T_affine = Eigen::Matrix4f::Identity();
     T_affine(0, 0) = alpha;  T_affine(0, 1) = -beta; T_affine(0, 3) = pos.x;
     T_affine(1, 0) = beta;   T_affine(1, 1) = alpha;  T_affine(1, 3) = pos.y;
     
-    const size_t max_res = system.sensor.scan_res;
+    const size_t max_res = sensor.scan_res;
     std::vector<float> x;
     x.resize(max_res);
 
-    float aux = static_cast<float>(system.sensor.valid_len) / static_cast<float>(system.sensor.scan_res);
-    for (int i=0; i<system.sensor.scan_res; ++i)
+    float aux = static_cast<float>(sensor.valid_len) / sensor.scan_res;
+    for (int i=0; i<sensor.scan_res; ++i)
     {
-        x[i] = aux * (system.sensor.scan_res/2l - i) * is_under;
+        x[i] = aux * (sensor.scan_res/2l - i) * is_under;
     }
 
-    raw_recs[IDX] = pcl::make_shared<pcl::PointCloud<pcl::PointXYZ>>();
+    raw_recs[loc] = pcl::make_shared<pcl::PointCloud<pcl::PointXYZ>>();
     // Processing each scan line to reconstruct the 3D point cloud
     SPDLOG_LOGGER_INFO(logger,"Processing scan image {}", scan);
     // create a auxiliary point cloud to store the reconstruction of a line
-    pcl::PointCloud<pcl::PointXYZ>::Ptr line_cloud = pcl::make_shared<pcl::PointCloud<pcl::PointXYZ>>();
+    auto line_cloud = pcl::make_shared<pcl::PointCloud<pcl::PointXYZ>>();
     line_cloud->reserve(max_res);
     // create a auxiliary vector to store the depth of a line
     std::vector<uint16_t> scan_buffer(max_res);
@@ -68,8 +66,7 @@ void RingMeasure::RingCalibration::reconstruct(const fs::path& path_)
         for (size_t i = 0; i < max_res; ++i) {
             if(scan_buffer[i] > 0)
             {
-                float raw_y = static_cast<float>(scan_buffer[i]) * pitch_scale
-                              + pitch_offset;
+                float raw_y = scan_buffer[i] * sensor.pitch_scale + sensor.pitch_offset;
                 line_cloud->emplace_back(x[i], raw_y, 0.0f);
             }
         }
@@ -108,7 +105,9 @@ void RingMeasure::RingCalibration::reconstruct(const fs::path& path_)
                 // disable the multi-threading first, see ring_cali.cpp
                 // Set show = 1 to plot the interactive one
                 // /py line.plot_line($idx, $show, $ra, $ri, $h, $table_h)
-                // SPDLOG_LOGGER_INFO(spdlog::default_logger(), "Drawing scan line {} : {:3d} with {} valid to file {}.", scanLocationToString(scan_loc), idx, cloud_x.size(), path);
+                // SPDLOG_LOGGER_INFO(spdlog::default_logger(), "Drawing scan line {} :"
+                //     " {:3d} with {} valid to file {}.", scanLocationToString(scan_loc), 
+                //     idx, cloud_x.size(), path);
             }
             pcl::transformPointCloud(*line_cloud, *line_cloud, T_y);
         }
@@ -122,7 +121,7 @@ void RingMeasure::RingCalibration::reconstruct(const fs::path& path_)
         #endif
         
         // Add the line cloud to the final reconstruction
-        *raw_recs[IDX] += *line_cloud;
+        *raw_recs[loc] += *line_cloud;
     }
 
     TIFFClose(tif);

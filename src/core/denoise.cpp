@@ -96,9 +96,10 @@ namespace {
         float percentile_curv_thld;
         if(mode != RingMeasure::Modes::MODE1){
             std::sort(points.begin(), points.end(), 
-                [](const std::vector<float>& a, const std::vector<float>& b) {
-                  return a[0] > b[0]; // Greater than for descending order
-                }
+                      [](const std::vector<float>& a, const std::vector<float>& b)
+                      {
+                        return a[0] > b[0]; // Greater than for descending order
+                      }
             );
             float ratio = params.curv_thld_ratio;
             int percentile_index = scans * ratio;
@@ -190,9 +191,12 @@ namespace {
         );
         SPDLOG_LOGGER_TRACE(logger, "Before sorting: centroids = [{}]", fmt::join(centroids, ", "));
         // Sort the array in descending order becasue acos is a decreasing function.
-        std::sort(centroids.begin(), centroids.end(), [](const float& a, const float& b) {
-            return a > b;
-        });
+        std::sort(centroids.begin(), centroids.end(), 
+                 [](const float& a, const float& b)
+                 {
+                     return a > b;
+                 }
+        );
         SPDLOG_LOGGER_TRACE(logger, "After filtering and sorting: centroids = [{}]", fmt::join(centroids, ", "));
         std::for_each(centroids.begin(), centroids.end(), [](float& val) {
             val = std::acos(val);
@@ -223,11 +227,8 @@ namespace RingMeasure {
         fs::path path,
         const std::string prefix)
     {
-        // namespace spdl=spdlog::level;
-        // get the logger system
-        // auto logger = spdlog::get("Cali");
         // 1. Create a KdTree for fast spatial search
-        pcl::search::KdTree<pcl::PointXYZ>::Ptr tree = pcl::make_shared<pcl::search::KdTree<pcl::PointXYZ>>();
+        auto tree = pcl::make_shared<pcl::search::KdTree<pcl::PointXYZ>>();
         tree->setInputCloud(input);
       
         // 2. Vector to hold indices of each detected cluster
@@ -235,7 +236,7 @@ namespace RingMeasure {
       
         // 3. Configure EuclideanClusterExtractor
         pcl::EuclideanClusterExtraction<pcl::PointXYZ> ec;
-        ec.setClusterTolerance(camera_resolution + 1.5f);
+        ec.setClusterTolerance(system.sensor.cam_res + 1.5f);
         ec.setMinClusterSize(min_cluster_size);
         ec.setMaxClusterSize(input->size());
         ec.setSearchMethod(tree);
@@ -251,13 +252,18 @@ namespace RingMeasure {
         }
         
         #if SPDLOG_LEVEL_DEBUG >= ACTIVE_LOG_LEVEL
-            pcl::PointCloud<pcl::PointXYZRGB>::Ptr colored_ec_out = rm::colorizeClusters(input, ec_out_indices);
+            auto colored_ec_out = rm::colorizeClusters(input, ec_out_indices);
         #endif
-        std::sort(ec_out_indices.begin(), ec_out_indices.end(), [](const pcl::PointIndices& a, const pcl::PointIndices& b) {
-            return a.indices.size() > b.indices.size(); // Sort in descending order of cluster size
-        });
+        std::sort(ec_out_indices.begin(), ec_out_indices.end(),
+            // Sort in descending order of cluster size
+            [](const pcl::PointIndices& a, const pcl::PointIndices& b)
+            {
+                return a.indices.size() > b.indices.size(); 
+            }
+        );
       
-        SPDLOG_LOGGER_DEBUG(logger, "Writing the {} clusters of out denoised to: {}", ec_out_indices.size(), path);
+        SPDLOG_LOGGER_DEBUG(logger, "Writing the {} clusters of out denoised to: {}",
+                                    ec_out_indices.size(), path);
         SPDLOG_EXEC(logger, spdl::debug, 
             rm::writeSegmentation<pcl::PointXYZ>(input, ec_out_indices, path, prefix + "ECSeg_", 100, logger));
         SPDLOG_LOGGER_DEBUG(logger, "Saving denoised reconstruction to {}", path / (prefix + "EC_out.ply"));
@@ -296,7 +302,7 @@ namespace RingMeasure {
         // For under, we first apply the clustering algorithm to the point cloud, and then select the four clusters
         // with the largest y coordinate based on the observation.
         pcl::PointCloud<pcl::PointXYZ>::Ptr out = pcl::make_shared<pcl::PointCloud<pcl::PointXYZ>>();
-        if (scan_loc == rm::ScanLocation::Under)
+        if (loc == rm::ScanLocation::Under)
         {
             int num_of_segs = ec_out_indices.size();
             cv::Mat feature(num_of_segs, 1, CV_32F); // the feature vector is the size of the clusters
@@ -321,11 +327,13 @@ namespace RingMeasure {
                 }
             }
             // sort the first clusters based on the y coordinate of the centroid
-            std::sort(target_clusters.begin(), target_clusters.end(), [&input](const pcl::PointIndices& a, const pcl::PointIndices& b) {
-                Eigen::Vector4f centroid_a, centroid_b;
-                pcl::compute3DCentroid(*input, a.indices, centroid_a);
-                pcl::compute3DCentroid(*input, b.indices, centroid_b);
-                return centroid_a.y() > centroid_b.y(); // Sort in descending order of y coordinate
+            std::sort(target_clusters.begin(), target_clusters.end(),
+                      [&input](const pcl::PointIndices& a, const pcl::PointIndices& b) {
+                          Eigen::Vector4f centroid_a, centroid_b;
+                          pcl::compute3DCentroid(*input, a.indices, centroid_a);
+                          pcl::compute3DCentroid(*input, b.indices, centroid_b);
+                          // Sort in descending order of y coordinate
+                          return centroid_a.y() > centroid_b.y(); 
             });
             // take the first four clusters according to the oberservation
             // The parameter four is an observation based on the point cloud data.
@@ -347,10 +355,6 @@ namespace RingMeasure {
             for (int i=1; i<k; ++i)
             {
                 pcl::compute3DCentroid(*input, ec_out_indices[i].indices, centroid);
-                // How to configure the functional?
-                // This function aims to find the cluster with maximum y coordinate, which is the ring.
-                // The y coordinate of other clusters should be smaller than the ring, becasue of the obervation
-                // that all the noise are under ring. So we set the functional to be std::less<float>().
                 if (!(centroid.y() < max_centroid_y))
                 {
                     out_denoise_selcted = i;
@@ -359,7 +363,8 @@ namespace RingMeasure {
             }
             pcl::ExtractIndices<pcl::PointXYZ> extract;
             extract.setInputCloud(input);
-            extract.setIndices(pcl::make_shared<pcl::PointIndices>(std::move(ec_out_indices[out_denoise_selcted])));
+            extract.setIndices(pcl::make_shared<pcl::PointIndices>
+                (std::move(ec_out_indices[out_denoise_selcted])));
             extract.setNegative(false); // Keep only the specified indices
             extract.filter(*out);
         }
@@ -374,18 +379,18 @@ namespace RingMeasure {
         pcl::PointCloud<pcl::PointNormal>::Ptr& base)
         {
             auto params = getParam().reg_growing;
-            pcl::PointCloud <pcl::Normal>::Ptr normals = pcl::make_shared<pcl::PointCloud <pcl::Normal>>();
+            auto normals = pcl::make_shared<pcl::PointCloud <pcl::Normal>>();
             pcl::NormalEstimation<pcl::PointXYZ, pcl::Normal> normal_estimator;
             // set the search method for the normal estimation
-            pcl::search::KdTree<pcl::PointXYZ>::Ptr tree = pcl::make_shared<pcl::search::KdTree<pcl::PointXYZ>>();
+            auto tree = pcl::make_shared<pcl::search::KdTree<pcl::PointXYZ>>();
             tree->setInputCloud (input);
             normal_estimator.setSearchMethod (tree);
             normal_estimator.setInputCloud (input);
-            normal_estimator.setRadiusSearch (camera_resolution*params.radius_ratio);
-            // Set all the normals point into the center of the cylinder, which is (0, mid_height, 0)
+            normal_estimator.setRadiusSearch (system.sensor.cam_res*params.radius_ratio);
+            // Set all the normals point into the center of the cylinder (0, mid_height, 0)
             // later we can reverse the normals to point outside of the surface
             // which is a requirement for many applications.
-            normal_estimator.setViewPoint (0.0f, mid_height, 0.0f);
+            normal_estimator.setViewPoint (0.0f, measure.ring.mid_height, 0.0f);
             // normal_estimator.setKSearch (500); 
             normal_estimator.compute (*normals);
 
@@ -396,7 +401,7 @@ namespace RingMeasure {
                 n.normal_z = -n.normal_z;
             }
 
-            pcl::PointCloud<pcl::PointNormal>::Ptr input_with_normals = pcl::make_shared<pcl::PointCloud<pcl::PointNormal>>();
+            auto input_with_normals = pcl::make_shared<pcl::PointCloud<pcl::PointNormal>>();
             pcl::concatenateFields(*input, *normals, *input_with_normals);
             input.reset();
             normals.reset();
@@ -411,10 +416,10 @@ namespace RingMeasure {
             input_with_normals->width = static_cast<uint32_t>(input_with_normals->points.size());
             input_with_normals->height = 1;
             
-            pcl::search::KdTree<pcl::PointNormal>::Ptr tree_ = pcl::make_shared<pcl::search::KdTree<pcl::PointNormal>>();
+            auto tree_ = pcl::make_shared<pcl::search::KdTree<pcl::PointNormal>>();
 
             pcl::RegionGrowing<pcl::PointNormal, pcl::PointNormal> reg;
-            reg.setResidualThreshold (camera_resolution * params.residual_ratio);
+            reg.setResidualThreshold (system.sensor.cam_res * params.residual_ratio);
             reg.setMinClusterSize (params.min_cluster_size);
             reg.setMaxClusterSize (input_with_normals->size());
             tree_->setInputCloud (input_with_normals);
@@ -443,7 +448,8 @@ namespace RingMeasure {
             } else 
             {
                 std::string error_msg = "Invalid curvature threshold type " +
-                    std::to_string(static_cast<int>(params.curvature_type)) + ". Please check the configuration.";
+                    std::to_string(static_cast<int>(params.curvature_type)) +
+                                   ". Please check the configuration.";
                 SPDLOG_LOGGER_ERROR(logger, error_msg);
                 throw std::runtime_error(error_msg);
             }
@@ -460,7 +466,8 @@ namespace RingMeasure {
                 SPDLOG_LOGGER_INFO(logger, "Smoothness threshold is automatically determined.");
             } else 
             {
-                SPDLOG_LOGGER_ERROR(logger, "Invalid smoothness threshold type: {}", static_cast<int>(params.normal_type));
+                SPDLOG_LOGGER_ERROR(logger, "Invalid smoothness threshold type: {}",
+                    static_cast<int>(params.normal_type));
                 return nullptr;
             }
 
@@ -471,31 +478,37 @@ namespace RingMeasure {
             SPDLOG_EXEC(logger, spdl::debug, visualizeNormal(input_with_normals,
                 path / (prefix + "normal_normalized_visualization.ply"), logger));
             
-            std::vector <pcl::PointIndices> segmentation_indices;
-            reg.extract (segmentation_indices);
-            std::sort(segmentation_indices.begin(), segmentation_indices.end(),
-                     [](const pcl::PointIndices& a, const pcl::PointIndices& b) {
-                     return a.indices.size() > b.indices.size(); // Sort in descending order of cluster size
-            }); 
+            std::vector <pcl::PointIndices> seg_indices;
+            reg.extract (seg_indices);
+            std::sort(seg_indices.begin(), seg_indices.end(),
+                     // Sort in descending order of cluster size
+                     [](const pcl::PointIndices& a, const pcl::PointIndices& b)
+                     {
+                         return a.indices.size() > b.indices.size();
+                     }
+            ); 
             
             SPDLOG_LOGGER_DEBUG(logger, "Write the {} clusters of out segmented to: {}",
-                segmentation_indices.size(), path);
+                seg_indices.size(), path);
             SPDLOG_EXEC(logger, spdl::debug, 
-                rm::writeSegmentation<pcl::PointNormal>(input_with_normals, segmentation_indices,
+                rm::writeSegmentation<pcl::PointNormal>(input_with_normals, seg_indices,
                     path, prefix + "RGSeg_", 10, logger));
 
-            SPDLOG_LOGGER_DEBUG(logger, "Saving the downsampled point cloud ({} points) with normals to {}",
+            SPDLOG_LOGGER_DEBUG(logger, "Saving the downsampled PC ({} points) to {}",
                           input_with_normals->size(), path / (prefix + "normal.ply"));
 
             pcl::PointCloud <pcl::PointXYZRGB>::Ptr colored_cloud = reg.getColoredCloud ();
             SPDLOG_LOGGER_INFO(logger, "Saving the colored segmented point cloud to {}",
                 path / (prefix + "segmented.ply"));
-            SPDLOG_EXEC(logger, spdl::info, savePLY(path / (prefix + "segmented.ply"), *colored_cloud));
-            SPDLOG_EXEC(logger, spdl::debug, savePLY(path / (prefix + "normal.ply"), *input_with_normals));
-            if (segmentation_indices.size() < 2)
+            SPDLOG_EXEC(logger, spdl::info, 
+                savePLY(path / (prefix + "segmented.ply"), *colored_cloud));
+            SPDLOG_EXEC(logger, spdl::debug, 
+                savePLY(path / (prefix + "normal.ply"), *input_with_normals));
+            if (seg_indices.size() < 2)
             {
-                std::string error_msg = "Failed to apply ECSegmentation: not enough segments found. "
-                    "Please check the log for details or set the curvature threshold and smoothness threshold manually.";
+                std::string error_msg = "Failed to apply ECSegmentation: not enough segments"
+                " found. Please check the log for details or set the curvature threshold and"
+                " smoothness threshold manually.";
                 SPDLOG_LOGGER_ERROR(logger, error_msg);
                 throw std::runtime_error(error_msg);
             }
@@ -503,22 +516,18 @@ namespace RingMeasure {
             pcl::PointIndices::Ptr lateral_indices = pcl::make_shared<pcl::PointIndices>();
             pcl::PointIndices::Ptr base_indices = pcl::make_shared<pcl::PointIndices>();
 
-            if (scan_loc != rm::ScanLocation::Under){
+            if (loc != rm::ScanLocation::Under){
                 // select the cluster lateral and the base
                 int lateral_idx = 0, base_idx = 1;
                 Eigen::Vector4f lateral_centroid, base_centroid;
-                pcl::compute3DCentroid(*input_with_normals, segmentation_indices[lateral_idx], lateral_centroid);
-                pcl::compute3DCentroid(*input_with_normals, segmentation_indices[base_idx], base_centroid);
-                // How to configure the functional?
-                // This function aims to distinguish the base and the lateral of the cylinder. And we want to
-                // select the lateral of the cone, which has a smaller y coordinate than the base.
-                // So we set the functional to be std::less<float>().
+                pcl::compute3DCentroid(*input_with_normals, seg_indices[lateral_idx], lateral_centroid);
+                pcl::compute3DCentroid(*input_with_normals, seg_indices[base_idx], base_centroid);
                 if (!(lateral_centroid.y() < base_centroid.y()))
                 {
                     std::swap(lateral_idx, base_idx);
                 }
-                lateral_indices = pcl::make_shared<pcl::PointIndices>(segmentation_indices[lateral_idx]);
-                base_indices = pcl::make_shared<pcl::PointIndices>(segmentation_indices[base_idx]);
+                lateral_indices = pcl::make_shared<pcl::PointIndices>(seg_indices[lateral_idx]);
+                base_indices = pcl::make_shared<pcl::PointIndices>(seg_indices[base_idx]);
 
             } else 
             // Processing of segmentation for the underneath scan.
@@ -527,8 +536,8 @@ namespace RingMeasure {
             // Then cluster the remaining segments according to the y coordinate
             // of the centroid to separate the base and the lateral.
             {
-                auto seg_indices = segmentation_indices;
-                int num_of_segs = seg_indices.size();
+                auto segs = seg_indices;
+                int num_of_segs = segs.size();
                 cv::Mat feature(num_of_segs, 1, CV_32F); // the feature vector is the size of the clusters
                 // The k is set based on the observation of the point cloud data.
                 // The scan from under consists of three four parts, which are separated by the cross.
@@ -539,7 +548,7 @@ namespace RingMeasure {
                 int k = params.cluster_size; // number of clusters in k-means
                 for (int i = 0; i < num_of_segs; ++i)
                 {
-                    feature.at<float>(i, 0) = seg_indices[i].indices.size();
+                    feature.at<float>(i, 0) = segs[i].indices.size();
                 }
                 cv::Mat labels, centers;
                 cv::TermCriteria criteria(cv::TermCriteria::EPS + cv::TermCriteria::COUNT, 1000, 1.0);
@@ -554,11 +563,12 @@ namespace RingMeasure {
                     
                     if (labels.at<int>(i, 0) != dsicard)
                     {
-                        target_clusters.push_back(seg_indices[i]);
+                        target_clusters.push_back(segs[i]);
                     }
                 }
 
-                cv::Mat feature_y(target_clusters.size(), 1, CV_32F); // the feature vector is the y coordinate of the centroid
+                // the feature vector is the y coordinate of the centroid
+                cv::Mat feature_y(target_clusters.size(), 1, CV_32F);
                 for (int i = 0; i < target_clusters.size(); ++i)
                 {
                     Eigen::Vector4f centroid;
@@ -579,22 +589,25 @@ namespace RingMeasure {
                     std::swap(y1, y2);
                     labels_y = 1 - labels_y; // swap the labels accordingly
                 }
-                SPDLOG_LOGGER_INFO(logger, "The y coordinate of the lateral and base clusters are: {} and {}", y1, y2);
+                SPDLOG_LOGGER_INFO(logger, "Y coordinates of the lateral and base clusters are: {} and {}", y1, y2);
 
                 for (int i = 0; i < target_clusters.size(); ++i)
                 {   
-                    SPDLOG_LOGGER_DEBUG(logger, "The y coordinate of the segment {} is: {}, in cluster {}", i, feature_y.at<float>(i, 0), labels_y.at<int>(i, 0));
+                    SPDLOG_LOGGER_DEBUG(logger, "The y coordinate of the segment {} is: {}, in cluster {}",
+                        i, feature_y.at<float>(i, 0), labels_y.at<int>(i, 0));
 
                     if (labels_y.at<int>(i, 0)==0)
                     {   
-                        lateral_indices->indices.reserve(lateral_indices->indices.size() + target_clusters[i].indices.size());
+                        lateral_indices->indices.reserve(lateral_indices->indices.size() 
+                                                         + target_clusters[i].indices.size());
                         lateral_indices->indices.insert(lateral_indices->indices.end(),
                                                         target_clusters[i].indices.begin(),
                                                         target_clusters[i].indices.end());
                     }
                     else
                     {
-                        base_indices->indices.reserve(base_indices->indices.size() + target_clusters[i].indices.size());
+                        base_indices->indices.reserve(base_indices->indices.size() 
+                                                      + target_clusters[i].indices.size());
                         base_indices->indices.insert(base_indices->indices.end(),
                                                      target_clusters[i].indices.begin(),
                                                      target_clusters[i].indices.end());
